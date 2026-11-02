@@ -107,6 +107,7 @@ Every PR runs:
 | `check`             | `pnpm lint`, `typecheck`, `test`, `build`                                  |
 | `Validate PR title` | Conventional Commit title                                                  |
 | PR labeler          | Adds area labels (`content`, `generation`, `studio`, …) from changed paths |
+| Vercel              | Deploys the PR to a preview URL and links it on the PR                     |
 
 A maintainer (see `.github/CODEOWNERS`) will review it. Please respond to comments by pushing
 new commits rather than force-pushing, which makes re-review easier. Resolve every review
