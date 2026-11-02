@@ -2,6 +2,11 @@
 
 **A virtual Museum of Modern Art that is itself a piece of modern art.**
 
+**🏛 Visit the museum: [ai-moma.vercel.app](https://ai-moma.vercel.app/)**
+
+[![CI](https://github.com/WaltXin/ai-moma/actions/workflows/ci.yml/badge.svg)](https://github.com/WaltXin/ai-moma/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 AI MoMA is an open-source, interactive museum you can walk through in your browser. Each
 **floor** holds **exhibitions** from a modern art movement: Pop Art, Op & Kinetic Art, and more
 as people contribute them. Visitors can:
