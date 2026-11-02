@@ -1,0 +1,5 @@
+pnpm-lock.yaml
+.next
+node_modules
+next-env.d.ts
+CODE_OF_CONDUCT.md

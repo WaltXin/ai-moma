@@ -1,0 +1,4 @@
+# Default reviewers for every change. Add area owners as the maintainer team grows, e.g.
+#   /src/lib/generation/  @someone-who-owns-providers
+#   /src/content/         @curators-team
+* @WaltXin

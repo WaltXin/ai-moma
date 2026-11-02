@@ -1,0 +1,41 @@
+name: 🖼 Propose an art movement or exhibition
+description: Suggest a new movement, floor or exhibition for the museum.
+labels: [content, triage]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Movement
+      placeholder: Surrealism
+    validations:
+      required: true
+  - type: input
+    id: period
+    attributes:
+      label: Period
+      placeholder: 1920s–1950s
+  - type: textarea
+    id: why
+    attributes:
+      label: What makes it distinctive?
+      description: Key ideas, techniques and visual traits a generator should capture.
+    validations:
+      required: true
+  - type: textarea
+    id: interaction
+    attributes:
+      label: Interactive or special viewing needs?
+      description: e.g. lenticular (Agamograph), kinetic, 3D sculpture, sound, installation.
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources
+      description: Links for the education content (museum pages, encyclopedias, books).
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Content rules
+      options:
+        - label: I understand AI MoMA teaches styles and techniques and does not reproduce copyrighted works.
+          required: true
+        - label: I'd like to write this movement myself (see CONTRIBUTING.md → Add a movement)

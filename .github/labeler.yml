@@ -1,0 +1,24 @@
+# Auto-applied to PRs by .github/workflows/pr-labeler.yml based on changed paths.
+content:
+  - changed-files:
+      - any-glob-to-any-file: ["src/content/**"]
+generation:
+  - changed-files:
+      - any-glob-to-any-file: ["src/lib/generation/**", "src/app/api/generate/**"]
+studio:
+  - changed-files:
+      - any-glob-to-any-file:
+          ["src/app/studio/**", "src/app/api/submissions/**", "src/lib/submissions/**"]
+gallery:
+  - changed-files:
+      - any-glob-to-any-file:
+          ["src/app/floors/**", "src/app/exhibitions/**", "src/app/learn/**", "src/components/**"]
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "*.md"]
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]
+tests:
+  - changed-files:
+      - any-glob-to-any-file: ["tests/**"]

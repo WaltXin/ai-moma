@@ -1,0 +1,30 @@
+name: ✨ Feature request
+description: Suggest a feature for the museum, Studio, viewers or platform.
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: For open-ended ideas, consider starting a [Discussion](https://github.com/WaltXin/ai-moma/discussions) first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Who is it for (visitors, artists, learners, curators, self-hosters)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to work on this

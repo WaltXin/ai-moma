@@ -1,0 +1,125 @@
+import { exhibitions as allExhibitions } from "@/content/exhibitions";
+import { floors as allFloors } from "@/content/floors";
+import { movements as allMovements } from "@/content/movements";
+import type { Exhibition, Floor, Movement } from "./types";
+
+/**
+ * Read-only access to museum content. Pages go through these helpers
+ * rather than importing `src/content` directly, so the storage can move
+ * to a database later without touching UI code.
+ */
+
+export function getFloors(): Floor[] {
+  return [...allFloors].sort((a, b) => a.level - b.level);
+}
+
+export function getFloor(slug: string): Floor | undefined {
+  return allFloors.find((f) => f.slug === slug);
+}
+
+export function getMovements(): Movement[] {
+  return allMovements;
+}
+
+export function getMovement(slug: string): Movement | undefined {
+  return allMovements.find((m) => m.slug === slug);
+}
+
+export function getExhibitions(): Exhibition[] {
+  return allExhibitions;
+}
+
+export function getExhibition(slug: string): Exhibition | undefined {
+  return allExhibitions.find((e) => e.slug === slug);
+}
+
+export function getExhibitionsOnFloor(floor: Floor): Exhibition[] {
+  return floor.exhibitions
+    .map((slug) => getExhibition(slug))
+    .filter((e): e is Exhibition => e !== undefined);
+}
+
+export function getFloorForExhibition(slug: string): Floor | undefined {
+  return allFloors.find((f) => f.exhibitions.includes(slug));
+}
+
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Checks that the content graph is consistent. Run in tests and CI so a
+ * contributor's PR fails fast if it references a missing movement, etc.
+ * Returns a list of human-readable problems (empty = valid).
+ */
+export function validateMuseum(
+  movements: Movement[] = allMovements,
+  exhibitions: Exhibition[] = allExhibitions,
+  floors: Floor[] = allFloors,
+): string[] {
+  const problems: string[] = [];
+
+  const dupes = (label: string, keys: (string | number)[]) => {
+    const seen = new Set<string | number>();
+    for (const k of keys) {
+      if (seen.has(k)) problems.push(`Duplicate ${label}: ${k}`);
+      seen.add(k);
+    }
+  };
+  dupes(
+    "movement slug",
+    movements.map((m) => m.slug),
+  );
+  dupes(
+    "exhibition slug",
+    exhibitions.map((e) => e.slug),
+  );
+  dupes(
+    "floor slug",
+    floors.map((f) => f.slug),
+  );
+  dupes(
+    "floor level",
+    floors.map((f) => f.level),
+  );
+  dupes(
+    "artwork id",
+    exhibitions.flatMap((e) => e.artworks.map((a) => a.id)),
+  );
+
+  for (const slug of [
+    ...movements.map((m) => m.slug),
+    ...exhibitions.map((e) => e.slug),
+    ...floors.map((f) => f.slug),
+  ]) {
+    if (!SLUG_RE.test(slug)) problems.push(`Invalid slug "${slug}" (use kebab-case)`);
+  }
+
+  const movementSlugs = new Set(movements.map((m) => m.slug));
+  for (const e of exhibitions) {
+    if (!movementSlugs.has(e.movement)) {
+      problems.push(`Exhibition "${e.slug}" references unknown movement "${e.movement}"`);
+    }
+  }
+
+  const exhibitionSlugs = new Set(exhibitions.map((e) => e.slug));
+  const placed = new Map<string, string>();
+  for (const f of floors) {
+    for (const slug of f.exhibitions) {
+      if (!exhibitionSlugs.has(slug)) {
+        problems.push(`Floor "${f.slug}" references unknown exhibition "${slug}"`);
+      }
+      const other = placed.get(slug);
+      if (other) problems.push(`Exhibition "${slug}" is on two floors: ${other}, ${f.slug}`);
+      placed.set(slug, f.slug);
+    }
+  }
+  for (const e of exhibitions) {
+    if (!placed.has(e.slug)) problems.push(`Exhibition "${e.slug}" is not on any floor`);
+  }
+
+  for (const m of movements) {
+    if (m.palette.length < 3) problems.push(`Movement "${m.slug}" needs at least 3 palette colors`);
+    if (m.learn.length === 0) problems.push(`Movement "${m.slug}" has no learn sections`);
+  }
+
+  return problems;
+}

@@ -1,0 +1,18 @@
+# Groups auto-generated GitHub release notes by PR label.
+changelog:
+  exclude:
+    labels: [skip-changelog]
+    authors: [dependabot]
+  categories:
+    - title: 🚨 Breaking changes
+      labels: [breaking]
+    - title: 🖼 New movements & exhibitions
+      labels: [content]
+    - title: 🚀 Features
+      labels: [enhancement]
+    - title: 🐛 Bug fixes
+      labels: [bug]
+    - title: 📚 Documentation
+      labels: [documentation]
+    - title: Other changes
+      labels: ["*"]
