@@ -28,6 +28,11 @@ export function Arrow({ direction = "right" }: { direction?: "right" | "up" | "d
   );
 }
 
+/** "No work yet", "1 work", "8 works". */
+export function worksLabel(n: number): string {
+  return n === 0 ? "No work yet" : n === 1 ? "1 work" : `${n} works`;
+}
+
 /** Solid action on a painted wall: ink on the wall's color, inverted. */
 export const BUTTON =
   "inline-flex items-center gap-3 bg-ink px-5 py-3 font-semibold text-wall transition-colors hover:bg-accent hover:text-white";

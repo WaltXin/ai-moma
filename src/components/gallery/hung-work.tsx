@@ -50,12 +50,71 @@ export function FramedPicture({
   );
 }
 
-/** A live Agamograph in a black frame: it changes as the pointer crosses it. */
-export function FramedAgamograph({ artwork }: { artwork: Artwork }) {
+/**
+ * A live Agamograph in a black frame: it changes as the pointer crosses it.
+ * With `controls`, a viewing-angle slider and tilt button sit under the frame.
+ */
+export function FramedAgamograph({
+  artwork,
+  controls = false,
+}: {
+  artwork: Artwork;
+  controls?: boolean;
+}) {
   if (artwork.source.kind !== "lenticular") return null;
-  return (
+  return controls ? (
+    <Agamograph
+      frames={artwork.source.frames}
+      alt={artwork.title}
+      imageClassName="frame frame-black"
+      className="[&_.frame]:mb-[var(--fw)]"
+    />
+  ) : (
     <div className="frame frame-black w-full">
       <Agamograph frames={artwork.source.frames} alt={artwork.title} showControls={false} />
+    </div>
+  );
+}
+
+/**
+ * The full label beside a work in its room: artist, title and date, medium,
+ * then where it comes from (museum credit and license, or how it was made).
+ */
+export function WallLabel({ artwork }: { artwork: Artwork }) {
+  return (
+    <div className="max-w-[34ch] text-[0.9375rem] leading-snug">
+      <p className="font-semibold">{artwork.artist}</p>
+      <p className="mt-0.5">
+        <span className="italic">{artwork.title}</span>, {artwork.dateLabel ?? artwork.year}
+      </p>
+      <p className="mt-3 text-muted">{artwork.medium}</p>
+      {artwork.credit && (
+        <p className="mt-3 text-sm text-muted">
+          {artwork.credit.line && <span className="block">{artwork.credit.line}</span>}
+          <a
+            href={artwork.credit.url}
+            className="mt-1 inline-block text-ink underline underline-offset-4 hover:decoration-2"
+          >
+            {artwork.credit.institution}
+          </a>{" "}
+          · Public domain (CC0)
+        </p>
+      )}
+      {artwork.recipe && (
+        <p className="mt-3 text-sm text-muted">
+          Drawn in code by the Studio with the movement&apos;s techniques. Not a copy of any
+          existing work.
+        </p>
+      )}
+      {artwork.generation && (
+        <p className="mt-3 text-sm text-muted">
+          Made with {artwork.generation.provider}
+          {artwork.generation.model ? ` (${artwork.generation.model})` : ""}
+          {artwork.generation.prompt && (
+            <span className="mt-1 block">Prompt: “{artwork.generation.prompt}”</span>
+          )}
+        </p>
+      )}
     </div>
   );
 }
