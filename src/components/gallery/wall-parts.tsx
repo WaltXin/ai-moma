@@ -12,8 +12,8 @@ export function KeepHyphens({ text }: { text: string }) {
   ));
 }
 
-export function Arrow({ direction = "right" }: { direction?: "right" | "up" | "down" }) {
-  const rotate = { right: "", up: "-rotate-90", down: "rotate-90" }[direction];
+export function Arrow({ direction = "right" }: { direction?: "right" | "left" | "up" | "down" }) {
+  const rotate = { right: "", left: "rotate-180", up: "-rotate-90", down: "rotate-90" }[direction];
   return (
     <svg
       aria-hidden
@@ -40,6 +40,46 @@ export const BUTTON =
 /** Quiet action: an underlined link. */
 export const TEXT_LINK =
   "font-semibold underline decoration-1 underline-offset-[6px] hover:decoration-2";
+
+/** A movement's palette as paint chips. */
+export function PaintChips({
+  colors,
+  size = "md",
+  decorative = false,
+}: {
+  colors: string[];
+  size?: "sm" | "md";
+  /** Hide from screen readers when the chips sit inside a labelled control. */
+  decorative?: boolean;
+}) {
+  return (
+    <ul
+      aria-label={decorative ? undefined : "Palette"}
+      aria-hidden={decorative || undefined}
+      className="flex gap-1.5"
+    >
+      {colors.map((c) => (
+        <li
+          key={c}
+          title={c}
+          className={`${size === "sm" ? "h-5 w-3.5" : "h-9 w-6"} shadow-[0_2px_4px_-1px_rgb(0_0_0/0.35)]`}
+          style={{ background: c }}
+        >
+          <span className="sr-only">{c}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Floor number in a lit elevator button, for wayfinding rows. */
+export function FloorBadge({ level }: { level: number }) {
+  return (
+    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink font-display text-lg font-bold text-wall">
+      {level}
+    </span>
+  );
+}
 
 /** Round elevator buttons, top floor first; the current floor is lit. A column on desktop. */
 export function Elevator({ floors, current }: { floors: Floor[]; current?: string }) {

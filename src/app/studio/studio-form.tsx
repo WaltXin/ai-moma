@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { Arrow, BUTTON, PaintChips } from "@/components/gallery/wall-parts";
 
 export type StudioMovement = {
   slug: string;
   name: string;
+  period: string;
+  palette: string[];
   available: boolean;
   acceptsImage: boolean;
 };
@@ -12,10 +16,20 @@ export type StudioProvider = { id: string; label: string };
 
 type Result = { imageUrl: string; provider: string; model?: string };
 
-const field = "w-full border border-line bg-plinth px-3 py-2 focus:border-ink focus:outline-none";
-const label = "mb-1 block text-sm font-medium";
-const button =
-  "bg-ink px-5 py-2.5 font-medium text-wall hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40";
+const field =
+  "w-full border border-ink/25 bg-white/60 px-3.5 py-2.5 text-base placeholder:text-muted focus:border-ink";
+const label = "mb-2 block font-semibold";
+const hint = "mt-2 text-sm text-muted";
+const button = `${BUTTON} disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-ink disabled:hover:text-wall`;
+
+/** Errors read as a dark plaque on the wall, not as colored text. */
+function Alert({ children }: { children: React.ReactNode }) {
+  return (
+    <p role="alert" className="bg-ink px-4 py-3 text-sm text-wall">
+      {children}
+    </p>
+  );
+}
 
 export function StudioForm(props: {
   movements: StudioMovement[];
@@ -66,27 +80,53 @@ export function StudioForm(props: {
     }
   }
 
+  const open = props.movements.filter((m) => m.available);
+  const soon = props.movements.filter((m) => !m.available);
+
   return (
-    <div className="grid gap-12 lg:grid-cols-2">
-      <form onSubmit={generate} className="space-y-5">
-        <div>
-          <label className={label} htmlFor="movement">
-            Movement
-          </label>
-          <select
-            id="movement"
-            className={field}
-            value={movement}
-            onChange={(e) => setMovement(e.target.value)}
-          >
-            {props.movements.map((m) => (
-              <option key={m.slug} value={m.slug} disabled={!m.available}>
-                {m.name}
-                {m.available ? "" : " (coming soon)"}
-              </option>
+    <div className="grid gap-x-10 gap-y-14 border-t border-line pt-10 md:grid-cols-12 md:pt-14">
+      <form onSubmit={generate} className="space-y-8 md:col-span-6">
+        <fieldset>
+          <legend className={label}>Movement</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {open.map((m) => (
+              <label
+                key={m.slug}
+                className="flex cursor-pointer flex-col gap-3 border border-ink/25 bg-white/40 p-4 transition-colors has-checked:border-ink has-checked:bg-white/80 has-focus-visible:outline-2 has-focus-visible:outline-offset-4"
+              >
+                <input
+                  type="radio"
+                  name="movement"
+                  value={m.slug}
+                  checked={movement === m.slug}
+                  onChange={() => setMovement(m.slug)}
+                  className="sr-only"
+                />
+                <PaintChips colors={m.palette} size="sm" decorative />
+                <span>
+                  <span className="block font-display text-xl font-bold [font-stretch:112%]">
+                    {m.name}
+                  </span>
+                  <span className="block text-sm text-muted">{m.period}</span>
+                </span>
+              </label>
             ))}
-          </select>
-        </div>
+          </div>
+          {soon.length > 0 && (
+            <p className={hint}>
+              Coming to the Studio:{" "}
+              {soon.map((m, i) => (
+                <span key={m.slug}>
+                  {i > 0 && ", "}
+                  <Link href={`/learn/${m.slug}`} className="underline-offset-4 hover:underline">
+                    {m.name}
+                  </Link>
+                </span>
+              ))}
+              .
+            </p>
+          )}
+        </fieldset>
 
         <div>
           <label className={label} htmlFor="prompt">
@@ -94,7 +134,7 @@ export function StudioForm(props: {
           </label>
           <textarea
             id="prompt"
-            className={`${field} min-h-24`}
+            className={`${field} min-h-28`}
             placeholder="e.g. my cat wearing sunglasses"
             maxLength={1000}
             value={prompt}
@@ -111,7 +151,7 @@ export function StudioForm(props: {
               id="image"
               type="file"
               accept="image/png,image/jpeg,image/webp"
-              className="text-sm"
+              className="block w-full text-sm file:mr-4 file:cursor-pointer file:border file:border-ink file:bg-transparent file:px-4 file:py-2 file:font-semibold file:text-ink hover:file:bg-ink hover:file:text-wall"
               onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
             />
             {preview && (
@@ -119,10 +159,10 @@ export function StudioForm(props: {
               <img
                 src={preview}
                 alt="Upload preview"
-                className="mt-3 h-32 w-32 border border-line object-cover"
+                className="frame frame-mat mt-4 h-32 w-auto"
               />
             )}
-            <p className="mt-1 text-xs text-muted">
+            <p className={hint}>
               Only upload photos you have the right to use. Please don&apos;t upload photos of other
               people without their consent.
             </p>
@@ -145,47 +185,61 @@ export function StudioForm(props: {
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-muted">
+          <p className={hint}>
             Only providers with API keys in <code>.env.local</code> appear here.
           </p>
         </div>
 
-        <button
-          type="submit"
-          className={button}
-          disabled={busy || !current?.available || (!prompt.trim() && !file)}
-        >
-          {busy ? "Generating…" : "Generate"}
-        </button>
-        {error && (
-          <p role="alert" className="text-sm text-accent">
-            {error}
-          </p>
-        )}
+        <div className="space-y-4">
+          <button
+            type="submit"
+            className={button}
+            disabled={busy || !current?.available || (!prompt.trim() && !file)}
+          >
+            {busy ? "Generating…" : "Generate"}
+            {!busy && <Arrow />}
+          </button>
+          {error && <Alert>{error}</Alert>}
+        </div>
       </form>
 
-      <div>
-        {result ? (
-          <>
-            <div className="aspect-square border-[10px] border-ink bg-plinth">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={result.imageUrl}
-                alt="Generated artwork"
-                className="h-full w-full object-cover"
-              />
+      <div className="md:col-span-5 md:col-start-8">
+        <div className={result ? undefined : "md:sticky md:top-8"}>
+          {result ? (
+            <figure>
+              <div className="p-[clamp(4px,0.62vw,10px)]">
+                {/* Generated images may be data: URLs or any host, so a plain <img>. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={result.imageUrl}
+                  alt={`Your ${current?.name ?? ""} piece`}
+                  className="frame frame-black h-auto w-full"
+                />
+              </div>
+              <figcaption className="mt-6 text-[0.9375rem] leading-snug">
+                <span className="block font-semibold">You</span>
+                <span className="block">
+                  <span className="italic">Untitled</span>, {new Date().getFullYear()}
+                </span>
+                <span className="mt-2 block text-muted">
+                  {current?.name}, made with {result.provider}
+                  {result.model ? ` (${result.model})` : ""}
+                </span>
+              </figcaption>
+              <ExhibitionRequest movement={movement} prompt={prompt} result={result} />
+            </figure>
+          ) : (
+            <div className="p-[clamp(4px,0.62vw,10px)]">
+              <div
+                className={`frame frame-black grid aspect-square w-full place-items-center bg-[repeating-linear-gradient(135deg,transparent_0_10px,rgb(0_0_0/0.06)_10px_11px)] ${busy ? "animate-pulse" : ""}`}
+              >
+                <p className="px-8 text-center text-muted">
+                  {busy ? "Painting your piece…" : "Your piece will hang here."}
+                </p>
+              </div>
             </div>
-            <p className="mt-2 font-mono text-xs text-muted">
-              via {result.provider}
-              {result.model ? ` / ${result.model}` : ""}
-            </p>
-            <ExhibitionRequest movement={movement} prompt={prompt} result={result} />
-          </>
-        ) : (
-          <div className="flex aspect-square items-center justify-center border border-dashed border-line text-muted">
-            Your piece will appear here.
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -231,11 +285,17 @@ function ExhibitionRequest({
     }
   }
 
-  if (state === "sent") return <p className="mt-6 border-l-4 border-ink pl-3">{message}</p>;
+  if (state === "sent") {
+    return (
+      <p className="mt-8 bg-ink px-4 py-3 text-wall" role="status">
+        {message}
+      </p>
+    );
+  }
 
   return (
-    <form onSubmit={submit} className="mt-8 space-y-4 border-t border-line pt-6">
-      <h2 className="text-xl font-bold">Request an exhibition</h2>
+    <form onSubmit={submit} className="mt-10 space-y-6 border-t border-line pt-8">
+      <h2 className="font-display text-2xl font-bold [font-stretch:112%]">Request an exhibition</h2>
       <div>
         <label className={label} htmlFor="title">
           Title
@@ -256,17 +316,13 @@ function ExhibitionRequest({
           id="statement"
           name="statement"
           maxLength={1000}
-          className={`${field} min-h-20`}
+          className={`${field} min-h-24`}
         />
       </div>
       <button type="submit" className={button} disabled={state === "sending"}>
         {state === "sending" ? "Sending…" : "Submit for review"}
       </button>
-      {state === "error" && (
-        <p role="alert" className="text-sm text-accent">
-          {message}
-        </p>
-      )}
+      {state === "error" && <Alert>{message}</Alert>}
     </form>
   );
 }

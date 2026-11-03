@@ -11,6 +11,17 @@ export const LOBBY_WALL: Wall = {
   line: "#7b3a40",
 };
 
+/**
+ * The Studio: a neutral working wall, so generated colors read true. Not a
+ * floor of its own; finished work goes to the Community Gallery on Floor 1.
+ */
+export const STUDIO_WALL: Wall = {
+  wall: "#d9dad6",
+  ink: "#151614",
+  muted: "#4f514c",
+  line: "#bdbfb9",
+};
+
 /** One wall color per floor, like rooms in a real museum. */
 const FLOOR_WALLS: Record<string, Wall> = {
   "light-and-color": { wall: "#1d2f4f", ink: "#f3efe6", muted: "#b9c5d8", line: "#3a4f73" },

@@ -9,6 +9,7 @@ import {
   Arrow,
   BUTTON,
   EmptyFrames,
+  FloorBadge,
   KeepHyphens,
   TEXT_LINK,
   worksLabel,
@@ -110,9 +111,7 @@ function FloorPlan({
       className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-b border-line py-5"
     >
       <Link href={`/floors/${floor.slug}`} className="group inline-flex items-center gap-3">
-        <span className="grid size-10 place-items-center rounded-full bg-ink font-display text-lg font-bold text-wall">
-          {floor.level}
-        </span>
+        <FloorBadge level={floor.level} />
         <span className="font-semibold underline-offset-4 group-hover:underline">
           <span className="sr-only">Floor {floor.level}: </span>
           {floor.name}
