@@ -1,7 +1,16 @@
 import Link from "next/link";
-import { type CSSProperties, Fragment } from "react";
-import { FramedAgamograph, FramedPicture, Tombstone, stillOf } from "@/components/lobby/hung-work";
-import { WallRepaint } from "@/components/lobby/wall-repaint";
+import type { CSSProperties } from "react";
+import { FramedPicture, Tombstone, stillOf } from "@/components/gallery/hung-work";
+import { LineHang } from "@/components/gallery/line-hang";
+import {
+  Arrow,
+  BUTTON,
+  EmptyFrames,
+  KeepHyphens,
+  TEXT_LINK,
+} from "@/components/gallery/wall-parts";
+import { WallRepaint } from "@/components/gallery/wall-repaint";
+import { LOBBY_WALL, floorWall, wallVars } from "@/components/gallery/walls";
 import {
   getArtwork,
   getExhibitions,
@@ -11,31 +20,6 @@ import {
   getMovements,
 } from "@/lib/museum/registry";
 import type { Artwork, Exhibition, Floor } from "@/lib/museum/types";
-
-/** Wall colors, one per floor, like rooms in a real museum. */
-type Wall = { wall: string; ink: string; muted: string; line: string };
-
-const LOBBY_WALL: Wall = { wall: "#5a1820", ink: "#f6ead8", muted: "#dcbcab", line: "#7b3a40" };
-
-const FLOOR_WALLS: Record<string, Wall> = {
-  "light-and-color": { wall: "#1d2f4f", ink: "#f3efe6", muted: "#b9c5d8", line: "#3a4f73" },
-  "avant-garde": { wall: "#113c35", ink: "#eff1e7", muted: "#a8cbbe", line: "#2d5a51" },
-  "between-the-wars": { wall: "#e7e2d7", ink: "#1a1a18", muted: "#57524a", line: "#c8c0b0" },
-  postwar: { wall: "#f7f7f5", ink: "#121212", muted: "#5c5c5c", line: "#dcdcd9" },
-  pop: { wall: "#f6c500", ink: "#141414", muted: "#463a00", line: "#d7aa00" },
-  perception: { wall: "#0d0d0f", ink: "#f2f2f2", muted: "#a4a4aa", line: "#2b2b30" },
-  community: { wall: "#ff2e63", ink: "#17070b", muted: "#4a0c1c", line: "#ff6f93" },
-};
-const DEFAULT_WALL = FLOOR_WALLS.postwar;
-
-function wallStyle(w: Wall): CSSProperties {
-  return {
-    "--floor-wall": w.wall,
-    "--floor-ink": w.ink,
-    "--floor-muted": w.muted,
-    "--floor-line": w.line,
-  } as CSSProperties;
-}
 
 /**
  * The salon wall in the lobby. Grid areas are `row / col / row-end / col-end`
@@ -65,10 +49,6 @@ function slotSizes(d: string, m?: string): string {
   };
   return `(min-width: 768px) ${span(d, 12)}vw, ${m ? span(m, 6) : 1}vw`;
 }
-
-/** Relative sizes along a floor's hang, so the line doesn't read as a row of thumbnails. */
-const HANG_SCALE = [1, 0.8, 1.1, 0.88, 0.96];
-const HANG_GAP = 4; // percent of the row, between works
 
 /** Up to five works per floor, taken in turn from each room so every room is represented. */
 function hangFor(exhibitions: Exhibition[]): { artwork: Artwork; room: Exhibition }[] {
@@ -106,10 +86,10 @@ export default function LobbyPage() {
   );
 
   return (
-    <WallRepaint>
+    <WallRepaint id="lobby" initial={LOBBY_WALL}>
       {/* Pull the lobby out to the full width of the window. */}
       <div className="-my-10 mx-[calc(50%-50vw)]">
-        <section data-wall="" style={wallStyle(LOBBY_WALL)} aria-labelledby="lobby-title">
+        <section data-wall="" style={wallVars(LOBBY_WALL)} aria-labelledby="lobby-title">
           <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 md:pt-10">
             <div className="salon">
               {salon.map(({ id, d, m, artwork }, i) => {
@@ -153,16 +133,13 @@ export default function LobbyPage() {
                   {firstHung && (
                     <Link
                       href={`/floors/${firstHung.slug}/walk`}
-                      className="inline-flex items-center gap-3 bg-ink px-6 py-3.5 text-lg font-semibold text-wall transition-colors hover:bg-accent hover:text-white"
+                      className={`${BUTTON} px-6 py-3.5 text-lg`}
                     >
                       Walk in
                       <Arrow />
                     </Link>
                   )}
-                  <Link
-                    href="/studio"
-                    className="font-semibold underline decoration-1 underline-offset-[6px] hover:decoration-2"
-                  >
+                  <Link href="/studio" className={TEXT_LINK}>
                     Make a piece in the Studio
                   </Link>
                 </div>
@@ -190,18 +167,15 @@ export default function LobbyPage() {
 
 function FloorWall({ floor }: { floor: Floor }) {
   const rooms = getExhibitionsOnFloor(floor);
-  const hang = hangFor(rooms);
-  const weights = hang.map(({ artwork }, i) => {
-    const still = stillOf(artwork)!;
-    return Math.sqrt(still.width / still.height) * HANG_SCALE[i % HANG_SCALE.length];
-  });
-  const total = weights.reduce((a, b) => a + b, 0);
-  const share = 100 - HANG_GAP * (hang.length - 1);
+  const hang = hangFor(rooms).map(({ artwork, room }) => ({
+    artwork,
+    href: `/exhibitions/${room.slug}`,
+  }));
 
   return (
     <section
       data-wall=""
-      style={wallStyle(FLOOR_WALLS[floor.slug] ?? DEFAULT_WALL)}
+      style={wallVars(floorWall(floor.slug))}
       aria-labelledby={`floor-${floor.slug}`}
       className="py-20 md:py-28"
     >
@@ -220,17 +194,11 @@ function FloorWall({ floor }: { floor: Floor }) {
             </h2>
             <p className="mt-4 max-w-[42ch] text-lg text-muted">{floor.tagline}</p>
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Link
-                href={`/floors/${floor.slug}/walk`}
-                className="inline-flex items-center gap-3 bg-ink px-5 py-3 font-semibold text-wall transition-colors hover:bg-accent hover:text-white"
-              >
+              <Link href={`/floors/${floor.slug}/walk`} className={BUTTON}>
                 Walk floor {floor.level}
                 <Arrow />
               </Link>
-              <Link
-                href={`/floors/${floor.slug}`}
-                className="font-semibold underline decoration-1 underline-offset-[6px] hover:decoration-2"
-              >
+              <Link href={`/floors/${floor.slug}`} className={TEXT_LINK}>
                 Floor guide
               </Link>
             </div>
@@ -261,47 +229,9 @@ function FloorWall({ floor }: { floor: Floor }) {
         </div>
       </div>
 
-      {hang.length > 0 && (
-        <div className="hang-strip mt-14 snap-x snap-mandatory scroll-px-4 overflow-x-auto md:mx-auto md:mt-20 md:max-w-6xl md:overflow-visible md:px-6">
-          <ul className="flex w-max items-center gap-10 px-4 pt-4 pb-6 sm:px-6 md:w-full md:gap-[4%] md:px-2.5">
-            {hang.map(({ artwork, room }, i) => {
-              const live = artwork.source.kind === "lenticular";
-              return (
-                <li
-                  key={artwork.id}
-                  className="w-[calc(var(--k)*52vw)] shrink-0 snap-start md:w-[var(--pct)]"
-                  style={
-                    {
-                      "--k": weights[i].toFixed(3),
-                      "--pct": `${((weights[i] / total) * share).toFixed(2)}%`,
-                    } as CSSProperties
-                  }
-                >
-                  {live ? (
-                    <FramedAgamograph artwork={artwork} />
-                  ) : (
-                    <Link href={`/exhibitions/${room.slug}`} className="block">
-                      <FramedPicture
-                        artwork={artwork}
-                        sizes="(min-width: 768px) 28vw, 60vw"
-                        className="w-full"
-                      />
-                    </Link>
-                  )}
-                  <div className="mt-6">
-                    <Tombstone artwork={artwork} medium={live} />
-                    {live && (
-                      <span className="mt-2 block text-[0.8125rem] font-semibold">
-                        Move across it to change the view.
-                      </span>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      <div className="mt-14 md:mt-20">
+        <LineHang items={hang} />
+      </div>
     </section>
   );
 }
@@ -309,13 +239,11 @@ function FloorWall({ floor }: { floor: Floor }) {
 function CommunityWall({ floor }: { floor: Floor }) {
   const rooms = getExhibitionsOnFloor(floor);
   const works = rooms.flatMap((r) => r.artworks).filter((a) => stillOf(a));
-  // Empty frames wait for visitors' work. Sizes echo a small hang.
-  const emptyFrames = ["aspect-[4/5] w-[30%]", "aspect-square w-[24%]", "aspect-[3/4] w-[20%]"];
 
   return (
     <section
       data-wall=""
-      style={wallStyle(FLOOR_WALLS[floor.slug] ?? DEFAULT_WALL)}
+      style={wallVars(floorWall(floor.slug))}
       aria-labelledby={`floor-${floor.slug}`}
       className="py-20 md:py-28"
     >
@@ -337,74 +265,37 @@ function CommunityWall({ floor }: { floor: Floor }) {
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               href="/studio"
-              className="inline-flex items-center gap-3 bg-ink px-6 py-3.5 text-lg font-semibold text-wall transition-colors hover:bg-white hover:text-ink"
+              className={`${BUTTON} px-6 py-3.5 text-lg hover:bg-white hover:text-ink`}
             >
               Open the Studio
               <Arrow />
             </Link>
-            <Link
-              href={`/floors/${floor.slug}`}
-              className="font-semibold underline decoration-1 underline-offset-[6px] hover:decoration-2"
-            >
+            <Link href={`/floors/${floor.slug}`} className={TEXT_LINK}>
               Floor guide
             </Link>
           </div>
         </div>
 
-        <ul
-          className="flex items-center justify-between gap-[4%] self-center md:col-span-7"
-          aria-label={works.length ? `Work in the ${floor.name}` : "Empty frames waiting for work"}
-        >
-          {works.length > 0
-            ? works.slice(0, 3).map((artwork) => (
+        <div className="self-center md:col-span-7">
+          {works.length > 0 ? (
+            <ul
+              className="flex items-center justify-between gap-[4%]"
+              aria-label={`Work in the ${floor.name}`}
+            >
+              {works.slice(0, 3).map((artwork) => (
                 <li key={artwork.id} className="flex-1">
                   <FramedPicture artwork={artwork} sizes="(min-width: 768px) 20vw, 30vw" />
                   <div className="mt-5">
                     <Tombstone artwork={artwork} />
                   </div>
                 </li>
-              ))
-            : emptyFrames.map((size, i) => (
-                <li key={size} className={size.split(" ")[1]}>
-                  <div
-                    className={`frame frame-black ${size.split(" ")[0]} w-full bg-[repeating-linear-gradient(135deg,transparent_0_10px,rgb(0_0_0/0.06)_10px_11px)]`}
-                  />
-                  <div className="mt-5 text-[0.8125rem] leading-snug">
-                    <span className="block font-semibold">You</span>
-                    <span className="block">
-                      <span className="italic">{["Untitled", "Self-Portrait", "Study"][i]}</span>,
-                      2026
-                    </span>
-                  </div>
-                </li>
               ))}
-        </ul>
+            </ul>
+          ) : (
+            <EmptyFrames />
+          )}
+        </div>
       </div>
     </section>
-  );
-}
-
-/** Keeps hyphenated words like "Avant-Garde" on one line in big type. */
-function KeepHyphens({ text }: { text: string }) {
-  return text.split(" ").map((word, i) => (
-    <Fragment key={i}>
-      {i > 0 && " "}
-      <span className={word.includes("-") ? "whitespace-nowrap" : undefined}>{word}</span>
-    </Fragment>
-  ));
-}
-
-function Arrow() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 20 12"
-      className="h-3 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-    >
-      <path d="M0 6h18M13 1l5 5-5 5" />
-    </svg>
   );
 }

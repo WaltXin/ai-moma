@@ -1,17 +1,28 @@
 "use client";
 
 import { type ReactNode, useEffect, useRef } from "react";
+import { type Wall, wallCss } from "./walls";
 
 const KEYS = ["wall", "ink", "muted", "line"] as const;
 
 /**
- * Repaints the page as visitors move through the lobby. Each `[data-wall]`
+ * Paints the page in the colors of the wall in view. Each `[data-wall]`
  * section carries its colors as `--floor-*` custom properties. When a section
  * crosses the middle of the viewport, its colors move onto <body>, so the
- * header, the section and the footer share one wall that eases from floor to floor.
- * Without JavaScript, each section simply paints itself.
+ * header, the section and the footer share one wall that eases from one color
+ * to the next. Before hydration, `initial` paints the page; without
+ * JavaScript, each section simply paints itself.
  */
-export function WallRepaint({ children }: { children: ReactNode }) {
+export function WallRepaint({
+  id,
+  initial,
+  children,
+}: {
+  /** Unique per page, e.g. "lobby" or "floor-pop". */
+  id: string;
+  initial: Wall;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,7 +66,8 @@ export function WallRepaint({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div ref={ref} data-lobby="">
+    <div ref={ref} data-walls={id}>
+      <style>{wallCss(id, initial)}</style>
       {children}
     </div>
   );
