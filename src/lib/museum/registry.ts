@@ -40,6 +40,20 @@ export function getExhibitionsOnFloor(floor: Floor): Exhibition[] {
     .filter((e): e is Exhibition => e !== undefined);
 }
 
+/**
+ * Rooms that hang a movement, in the order a visitor meets them going up the
+ * building, curated rooms before community ones. The first is its home room.
+ */
+export function getExhibitionsForMovement(slug: string): Exhibition[] {
+  const rooms = getFloors()
+    .flatMap((f) => getExhibitionsOnFloor(f))
+    .filter((e) => e.movement === slug);
+  return [
+    ...rooms.filter((e) => e.kind === "curated"),
+    ...rooms.filter((e) => e.kind !== "curated"),
+  ];
+}
+
 export function getArtwork(id: string): Artwork | undefined {
   for (const e of allExhibitions) {
     const found = e.artworks.find((a) => a.id === id);
