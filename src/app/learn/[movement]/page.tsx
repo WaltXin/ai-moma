@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { WallFallback } from "@/components/gallery/wall-fallback";
 import { FramedPicture, Tombstone, WallLabel, stillOf } from "@/components/gallery/hung-work";
 import { LineHang } from "@/components/gallery/line-hang";
 import { Arrow, BUTTON, FloorBadge, PaintChips, TEXT_LINK } from "@/components/gallery/wall-parts";
@@ -33,8 +35,17 @@ function homeOf(movement: Movement) {
   return { room, floor, wall: floorWall(floor?.slug ?? "") };
 }
 
-export default async function LearnMovementPage(props: PageProps<"/learn/[movement]">) {
-  const movement = getMovement((await props.params).movement);
+export default function LearnMovementPage(props: PageProps<"/learn/[movement]">) {
+  // The page reads its address, so it streams in behind the wall it replaces.
+  return (
+    <Suspense fallback={<WallFallback />}>
+      <GuideWalls params={props.params} />
+    </Suspense>
+  );
+}
+
+async function GuideWalls({ params }: { params: PageProps<"/learn/[movement]">["params"] }) {
+  const movement = getMovement((await params).movement);
   if (!movement) notFound();
 
   const { room, floor, wall } = homeOf(movement);

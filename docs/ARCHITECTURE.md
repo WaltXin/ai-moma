@@ -60,6 +60,9 @@ collection image. Sources: Art Institute of Chicago (`aic`) and Cleveland Museum
 Next.js 16 with **Cache Components** (`cacheComponents: true`) and Partial Prefetching:
 
 - Lobby, floor, walk, exhibition and learn pages are prerendered at build time (`generateStaticParams`).
+  Pages that read `params` do it inside `<Suspense>` with `<WallFallback>`, so client navigations
+  are instant: the visitor's current wall stays up while the next page streams in, then
+  `<WallRepaint>` eases the colors over. Direct visits still get the whole prerendered page.
 - `/studio` is a partial prerender. The static header ships right away, and the form streams
   in after `connection()`, because the list of providers depends on runtime env vars.
 - `/api/generate` and `/api/submissions` are dynamic POST route handlers.

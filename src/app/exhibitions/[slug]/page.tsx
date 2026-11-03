@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { WallFallback } from "@/components/gallery/wall-fallback";
 import { ArtworkPlaceholder } from "@/components/artwork-frame";
 import { ElevatorDoors, nextFloor } from "@/components/gallery/elevator-doors";
 import { FramedAgamograph, FramedPicture, WallLabel } from "@/components/gallery/hung-work";
@@ -37,8 +39,17 @@ export async function generateMetadata(props: PageProps<"/exhibitions/[slug]">):
   };
 }
 
-export default async function ExhibitionPage(props: PageProps<"/exhibitions/[slug]">) {
-  const exhibition = getExhibition((await props.params).slug);
+export default function ExhibitionPage(props: PageProps<"/exhibitions/[slug]">) {
+  // The page reads its address, so it streams in behind the wall it replaces.
+  return (
+    <Suspense fallback={<WallFallback />}>
+      <RoomWalls params={props.params} />
+    </Suspense>
+  );
+}
+
+async function RoomWalls({ params }: { params: PageProps<"/exhibitions/[slug]">["params"] }) {
+  const exhibition = getExhibition((await params).slug);
   if (!exhibition) notFound();
   const movement = getMovement(exhibition.movement)!;
   const floor = getFloorForExhibition(exhibition.slug);

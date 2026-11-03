@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { WallFallback } from "@/components/gallery/wall-fallback";
 import { Elevator, FloorBadge, KeepHyphens, TEXT_LINK } from "@/components/gallery/wall-parts";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
@@ -22,8 +24,17 @@ export async function generateMetadata(
   };
 }
 
-export default async function WalkFloorPage(props: PageProps<"/floors/[floor]/walk">) {
-  const floor = getFloor((await props.params).floor);
+export default function WalkFloorPage(props: PageProps<"/floors/[floor]/walk">) {
+  // The page reads its address, so it streams in behind the wall it replaces.
+  return (
+    <Suspense fallback={<WallFallback />}>
+      <WalkWalls params={props.params} />
+    </Suspense>
+  );
+}
+
+async function WalkWalls({ params }: { params: PageProps<"/floors/[floor]/walk">["params"] }) {
+  const floor = getFloor((await params).floor);
   if (!floor) notFound();
 
   const floors = getFloors();
