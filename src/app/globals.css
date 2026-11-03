@@ -59,21 +59,17 @@ body {
   color: var(--ink);
 }
 
-/* ── Lobby ────────────────────────────────────────────────────────────
-   Every floor is a painted wall. Before hydration each section paints
-   itself; once <WallRepaint> runs, the sections go transparent and the
-   whole page (header and footer included) takes the color of the floor
-   in view, easing from one wall to the next. */
+/* ── Painted walls (lobby and floor pages) ─────────────────────────────
+   Each page is a run of painted walls. <WallRepaint> paints the page in its
+   first wall before hydration (a scoped rule it renders), then the sections
+   go transparent and the whole page, header and footer included, takes the
+   color of the wall in view, easing from one to the next. */
 
-body:has([data-lobby]:not([data-away])) {
+body:has([data-walls]:not([data-away])) {
   overflow-x: clip;
-  --wall: #5a1820;
-  --ink: #f6ead8;
-  --muted: #dcbcab;
-  --line: #7b3a40;
 }
 
-body:has([data-lobby][data-live]) {
+body:has([data-walls][data-live]) {
   transition:
     --wall 900ms cubic-bezier(0.16, 1, 0.3, 1),
     --ink 900ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -82,12 +78,12 @@ body:has([data-lobby][data-live]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body:has([data-lobby][data-live]) {
+  body:has([data-walls][data-live]) {
     transition: none;
   }
 }
 
-[data-lobby]:not([data-live]) [data-wall] {
+[data-walls]:not([data-live]) [data-wall] {
   --wall: var(--floor-wall);
   --ink: var(--floor-ink);
   --muted: var(--floor-muted);
@@ -96,12 +92,12 @@ body:has([data-lobby][data-live]) {
   color: var(--ink);
 }
 
-[data-lobby] ::selection {
+[data-walls] ::selection {
   background: var(--ink);
   color: var(--wall);
 }
 
-[data-lobby] :focus-visible {
+[data-walls] :focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 4px;
 }
