@@ -92,14 +92,17 @@ body:has([data-walls][data-live]) {
   color: var(--ink);
 }
 
-[data-walls] ::selection {
-  background: var(--ink);
-  color: var(--wall);
-}
+/* In the base layer so a component's own focus utilities can refine it. */
+@layer base {
+  [data-walls] ::selection {
+    background: var(--ink);
+    color: var(--wall);
+  }
 
-[data-walls] :focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 4px;
+  [data-walls] :focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+  }
 }
 
 @layer components {

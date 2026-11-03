@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Arrow } from "@/components/gallery/wall-parts";
+import type { Wall } from "@/components/gallery/walls";
 import {
   FRAME_W,
   type FloorPlan,
@@ -16,7 +18,7 @@ import {
   isWalkable,
   tileAt,
 } from "@/lib/walk/floor-plan";
-import { type Camera, type Visitor, drawScene, frameKey } from "./draw";
+import { type Camera, type Visitor, drawScene, frameKey, walkTheme } from "./draw";
 import { ArtworkViewer, ElevatorPanel, RoomInfo } from "./walk-overlays";
 
 /**
@@ -66,8 +68,10 @@ function dirBetween(a: Point, b: Point): Dir {
   return b.y > a.y ? "down" : "up";
 }
 
-export function WalkableFloor({ plan }: { plan: FloorPlan }) {
+export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
   const router = useRouter();
+  // The map's gallery walls take the floor's painted color.
+  const theme = useMemo(() => walkTheme(wall), [wall]);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -254,12 +258,13 @@ export function WalkableFloor({ plan }: { plan: FloorPlan }) {
         hoverId: g.hoverId,
         images: images.current,
         font,
+        theme,
       });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [plan, focusAt, open]);
+  }, [plan, focusAt, open, theme]);
 
   // Keyboard.
   useEffect(() => {
@@ -421,12 +426,13 @@ export function WalkableFloor({ plan }: { plan: FloorPlan }) {
           : null;
 
   return (
-    <div className="space-y-3">
+    <div>
       <div
         ref={containerRef}
         tabIndex={0}
         aria-label={`Walkable map of Floor ${plan.floor.level}, ${plan.floor.name}. Use arrow keys or WASD to walk and E to look at what's in front of you.`}
-        className="relative h-[min(72vh,680px)] min-h-[380px] w-full overflow-hidden border border-line bg-[#1b1a20] outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="relative h-[min(72vh,680px)] min-h-[380px] w-full overflow-hidden shadow-[0_1.5rem_3rem_-1.5rem_rgb(0_0_0/0.55)] focus-visible:outline-line"
+        style={{ background: theme.void }}
       >
         <canvas
           ref={canvasRef}
@@ -436,34 +442,28 @@ export function WalkableFloor({ plan }: { plan: FloorPlan }) {
           aria-hidden
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
-          <div className="rounded bg-black/70 px-3 py-1.5 text-white backdrop-blur">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-white/60">
-              Floor {plan.floor.level}
-            </p>
-            <p className="text-sm font-bold leading-tight">{plan.floor.name}</p>
-          </div>
-          <div className="pointer-events-auto flex gap-2">
-            <button
-              type="button"
-              onClick={() => setHelp((h) => !h)}
-              aria-expanded={help}
-              className="rounded bg-black/70 px-3 py-1.5 text-sm font-medium text-white backdrop-blur hover:bg-black"
-            >
-              Controls
-            </button>
-            <Link
-              href={`/floors/${plan.floor.slug}`}
-              className="rounded bg-black/70 px-3 py-1.5 text-sm font-medium text-white backdrop-blur hover:bg-black"
-            >
-              List view
-            </Link>
-          </div>
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end gap-2 p-3">
+          <button
+            type="button"
+            onClick={() => setHelp((h) => !h)}
+            aria-expanded={help}
+            className={`pointer-events-auto ${PLAQUE} hover:bg-ink hover:text-wall`}
+          >
+            Controls
+          </button>
+          <Link
+            href={`/floors/${plan.floor.slug}`}
+            className={`pointer-events-auto ${PLAQUE} hover:bg-ink hover:text-wall`}
+          >
+            Floor guide
+          </Link>
         </div>
 
         {(help || (hint && !focus)) && (
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-3">
-            <div className="max-w-md rounded bg-black/75 px-4 py-3 text-center text-sm text-white backdrop-blur">
+            <div
+              className={`max-w-md px-4 py-3 text-center text-sm leading-relaxed ${PLAQUE_BASE}`}
+            >
               Walk with <Kbd>W</Kbd>
               <Kbd>A</Kbd>
               <Kbd>S</Kbd>
@@ -478,9 +478,11 @@ export function WalkableFloor({ plan }: { plan: FloorPlan }) {
             <button
               type="button"
               onClick={() => open(focus)}
-              className="max-w-full truncate rounded-full bg-black/80 px-4 py-2 text-sm font-medium text-white shadow-lg backdrop-blur hover:bg-black"
+              className="inline-flex max-w-full items-center gap-2 bg-ink px-4 py-2.5 text-sm font-semibold text-wall shadow-lg transition-colors hover:bg-accent hover:text-white"
             >
-              <Kbd>E</Kbd> {focusLabel}
+              <Kbd>E</Kbd>
+              <span className="truncate">{focusLabel}</span>
+              <Arrow />
             </button>
           </div>
         )}
@@ -508,9 +510,13 @@ export function WalkableFloor({ plan }: { plan: FloorPlan }) {
   );
 }
 
+/** A wall plaque set over the map: the wall's own colors, solid, with a soft shadow. */
+const PLAQUE_BASE = "bg-wall text-ink shadow-[0_0.5rem_1rem_-0.5rem_rgb(0_0_0/0.6)]";
+const PLAQUE = `${PLAQUE_BASE} px-3.5 py-2 text-sm font-semibold transition-colors`;
+
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="mx-0.5 inline-block min-w-5 rounded border border-white/30 bg-white/10 px-1 font-mono text-xs">
+    <kbd className="mx-0.5 inline-grid min-w-6 place-items-center border border-current/40 px-1 font-mono text-xs leading-5">
       {children}
     </kbd>
   );

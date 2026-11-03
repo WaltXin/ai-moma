@@ -82,16 +82,28 @@ export function FloorBadge({ level }: { level: number }) {
 }
 
 /** Round elevator buttons, top floor first; the current floor is lit. A column on desktop. */
-export function Elevator({ floors, current }: { floors: Floor[]; current?: string }) {
+export function Elevator({
+  floors,
+  current,
+  walk = false,
+  row = false,
+}: {
+  floors: Floor[];
+  current?: string;
+  /** Go to each floor's walkable map instead of its floor guide. */
+  walk?: boolean;
+  /** Keep the buttons in one row on desktop too. */
+  row?: boolean;
+}) {
   return (
     <nav aria-label="Elevator">
-      <ol className="flex flex-wrap gap-2 md:flex-col md:flex-nowrap">
+      <ol className={`flex flex-wrap gap-2 ${row ? "" : "md:flex-col md:flex-nowrap"}`}>
         {[...floors].reverse().map((floor) => {
           const here = floor.slug === current;
           return (
             <li key={floor.slug}>
               <Link
-                href={`/floors/${floor.slug}`}
+                href={walk ? `/floors/${floor.slug}/walk` : `/floors/${floor.slug}`}
                 aria-current={here ? "page" : undefined}
                 title={`Floor ${floor.level}: ${floor.name}`}
                 className={`grid size-10 place-items-center rounded-full border font-display text-lg font-bold tabular-nums transition-colors ${

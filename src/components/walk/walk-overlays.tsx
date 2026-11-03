@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useEffect, useId, useRef } from "react";
 import { Agamograph } from "@/components/agamograph";
 import { ArtworkPlaceholder } from "@/components/artwork-frame";
+import { Arrow, BUTTON, TEXT_LINK } from "@/components/gallery/wall-parts";
 import type { FloorPlan, PlanArtwork, PlanRoom } from "@/lib/walk/floor-plan";
 
-/** Modal shell: dark backdrop, focus moves in on open, click outside to close. */
+/**
+ * Modal shell: a panel of the floor's own wall over a dark backdrop. Focus
+ * moves in on open; click outside or press Escape (handled by the floor) to close.
+ */
 function Dialog({
   labelledBy,
   onClose,
@@ -35,7 +39,7 @@ function Dialog({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`relative max-h-full w-full overflow-auto border border-line bg-plinth p-5 text-ink shadow-2xl outline-none sm:p-7 ${
+        className={`relative max-h-full w-full overflow-auto bg-wall p-6 text-ink shadow-[0_2rem_4rem_-1rem_rgb(0_0_0/0.7)] outline-none sm:p-8 ${
           wide ? "max-w-6xl" : "max-w-lg"
         }`}
       >
@@ -43,9 +47,17 @@ function Dialog({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 h-8 w-8 rounded-full text-xl leading-none text-muted hover:bg-wall hover:text-ink"
+          className="absolute top-3 right-3 grid size-10 place-items-center rounded-full transition-colors hover:bg-ink hover:text-wall"
         >
-          ×
+          <svg
+            aria-hidden
+            viewBox="0 0 14 14"
+            className="size-3.5"
+            stroke="currentColor"
+            strokeWidth="1.75"
+          >
+            <path d="M1 1l12 12M13 1L1 13" />
+          </svg>
         </button>
         {children}
       </div>
@@ -73,8 +85,8 @@ export function ArtworkViewer({
 
   return (
     <Dialog labelledBy={titleId} onClose={onClose} wide>
-      <div className="grid gap-6 lg:grid-cols-[1fr_19rem]">
-        <div className="flex min-h-[40vh] items-center justify-center bg-wall p-3 sm:p-6">
+      <div className="grid gap-8 lg:grid-cols-[1fr_19rem] lg:gap-10">
+        <div className="flex min-h-[40vh] items-center justify-center p-[clamp(4px,0.62vw,10px)]">
           {art.frames ? (
             <div
               key={art.id}
@@ -86,11 +98,12 @@ export function ArtworkViewer({
               <Agamograph
                 frames={art.frames}
                 alt={art.title}
-                className="[&>div:first-child]:border-[6px] [&>div:first-child]:border-[#2a2118] [&>div:first-child]:shadow-xl"
+                imageClassName="frame frame-black"
+                className="[&_.frame]:mb-[var(--fw)]"
               />
             </div>
           ) : art.image ? (
-            // Local public-domain files; a plain <img> keeps natural sizing in the modal.
+            // Local public-domain files and Studio SVGs; a plain <img> keeps natural sizing.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={art.id}
@@ -98,10 +111,10 @@ export function ArtworkViewer({
               width={art.image.width}
               height={art.image.height}
               alt={`${art.title} by ${art.artist}`}
-              className="max-h-[70vh] w-auto max-w-full border-[6px] border-[#2a2118] object-contain shadow-xl"
+              className={`frame frame-${art.frame} max-h-[68vh] w-auto max-w-full`}
             />
           ) : (
-            <div className="aspect-square w-full max-w-md border-[6px] border-[#2a2118]">
+            <div className="frame frame-black aspect-square w-full max-w-md">
               <ArtworkPlaceholder
                 id={art.id}
                 palette={room.movement.palette}
@@ -111,83 +124,94 @@ export function ArtworkViewer({
           )}
         </div>
 
-        <div className="flex flex-col pr-6 text-sm">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted">
-            {room.movement.name} · {room.title}
-          </p>
-          <h2 id={titleId} className="mt-3 text-2xl font-bold italic leading-tight">
-            {art.title}
-          </h2>
-          <p className="mt-2 text-base font-semibold">{art.artist}</p>
-          <p>{art.date}</p>
-          <p className="text-muted">{art.medium}</p>
+        <div className="flex flex-col pr-8 lg:pr-0 lg:pt-12">
+          <div className="text-[0.9375rem] leading-snug">
+            <p className="font-semibold">{art.artist}</p>
+            <h2 id={titleId} className="mt-0.5">
+              <span className="italic">{art.title}</span>, {art.date}
+            </h2>
+            <p className="mt-3 text-muted">{art.medium}</p>
 
-          {art.credit && (
-            <p className="mt-4 border-t border-line pt-4 text-xs text-muted">
-              {art.credit.institution}
-              {art.credit.line ? `, ${art.credit.line}` : ""}. Public domain (CC0).{" "}
-              <a href={art.credit.url} className="font-medium text-ink underline">
-                See it at the museum ↗
-              </a>
-            </p>
-          )}
-          {art.generative && (
-            <p className="mt-4 border-t border-line pt-4 text-muted">
-              An original piece drawn with code in the AI MoMA Studio, using {room.movement.name}{" "}
-              techniques. It hangs here until visitors&apos; AI-made work joins it.
-              {art.frames &&
-                " Move your pointer across it, or drag on a touch screen, to change the view."}
-            </p>
-          )}
-          {!art.image && (
-            <p className="mt-4 border-t border-line pt-4 text-muted">
-              This frame is waiting for a Studio piece made with {room.movement.name} techniques.{" "}
-              <Link
-                href={`/learn/${room.movement.slug}`}
-                className="font-medium text-ink underline"
-              >
-                Learn the techniques
-              </Link>
-              {room.movement.studioOpen && (
-                <>
-                  {" "}
-                  or{" "}
-                  <Link
-                    href={`/studio?movement=${room.movement.slug}`}
-                    className="font-medium text-ink underline"
-                  >
-                    make one
-                  </Link>
-                </>
-              )}
-              .
-            </p>
-          )}
-          {art.generation && (
-            <p className="mt-2 font-mono text-xs text-muted">
-              via {art.generation.provider}
-              {art.generation.model ? ` / ${art.generation.model}` : ""}
-            </p>
-          )}
+            {art.credit && (
+              <p className="mt-3 text-sm text-muted">
+                {art.credit.line && <span className="block">{art.credit.line}</span>}
+                <a
+                  href={art.credit.url}
+                  className="mt-1 inline-block text-ink underline underline-offset-4 hover:decoration-2"
+                >
+                  {art.credit.institution}
+                </a>{" "}
+                · Public domain (CC0)
+              </p>
+            )}
+            {art.generative && (
+              <p className="mt-3 text-sm text-muted">
+                Drawn in code by the Studio with {room.movement.name} techniques. Not a copy of any
+                existing work.
+                {art.frames &&
+                  " Move your pointer across it, drag on a touch screen, or use the slider to change the view."}
+              </p>
+            )}
+            {art.generation && (
+              <p className="mt-3 text-sm text-muted">
+                Made with {art.generation.provider}
+                {art.generation.model ? ` (${art.generation.model})` : ""}
+              </p>
+            )}
+            {!art.image && (
+              <p className="mt-3 text-sm text-muted">
+                This frame is waiting for a Studio piece made with {room.movement.name} techniques.{" "}
+                <Link href={`/learn/${room.movement.slug}`} className="text-ink underline">
+                  Learn the techniques
+                </Link>
+                {room.movement.studioOpen && (
+                  <>
+                    {" "}
+                    or{" "}
+                    <Link
+                      href={`/studio?movement=${room.movement.slug}`}
+                      className="text-ink underline"
+                    >
+                      make one
+                    </Link>
+                  </>
+                )}
+                .
+              </p>
+            )}
+          </div>
+
+          <p className="mt-6 border-t border-line pt-4 text-sm text-muted">
+            In{" "}
+            <Link
+              href={`/exhibitions/${room.slug}`}
+              className="text-ink underline-offset-4 hover:underline"
+            >
+              {room.title}
+            </Link>{" "}
+            · {room.movement.name}
+          </p>
 
           {siblings.length > 1 && (
-            <div className="mt-auto flex items-center justify-between gap-2 pt-6 font-medium">
+            <div className="mt-auto flex items-center justify-between gap-3 pt-8">
               <button
                 type="button"
                 onClick={() => onNavigate(prev)}
-                className="border border-line px-3 py-1.5 hover:border-ink"
+                className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
               >
-                ← Prev
+                <Arrow direction="left" />
+                Previous
               </button>
-              <span className="text-xs text-muted">
-                {i + 1} / {siblings.length}
+              <span className="text-sm text-muted tabular-nums">
+                {i + 1} of {siblings.length}
               </span>
               <button
                 type="button"
                 onClick={() => onNavigate(next)}
-                className="border border-line px-3 py-1.5 hover:border-ink"
+                className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
               >
-                Next →
+                Next
+                <Arrow />
               </button>
             </div>
           )}
@@ -201,26 +225,26 @@ export function RoomInfo({ room, onClose }: { room: PlanRoom; onClose: () => voi
   const titleId = useId();
   return (
     <Dialog labelledBy={titleId} onClose={onClose}>
-      <p className="font-mono text-xs uppercase tracking-widest text-muted">
-        {room.movement.name} · {room.movement.period}
-      </p>
-      <h2 id={titleId} className="mt-3 text-3xl font-black tracking-tight">
+      <h2 id={titleId} className="wall-title pr-10 text-[clamp(2rem,5vw,2.75rem)]">
         {room.title}
       </h2>
-      <p className="mt-3 text-lg">{room.description}</p>
-      <p className="mt-4 border-l-4 border-ink pl-3 text-sm">{room.movement.summary}</p>
-      <p className="mt-3 text-xs text-muted">Curated by {room.curator}</p>
-      <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium">
-        <Link href={`/learn/${room.movement.slug}`} className="hover:text-accent">
-          Learn {room.movement.name} →
+      <p className="mt-2 text-muted">
+        {room.movement.name} · {room.movement.period}
+      </p>
+      <p className="mt-6 text-lg leading-relaxed text-pretty">{room.description}</p>
+      <p className="mt-5 border-t border-line pt-5 leading-relaxed">{room.movement.summary}</p>
+      <p className="mt-3 text-sm text-muted">Curated by {room.curator}</p>
+      <div className="mt-7 flex flex-col items-start gap-3">
+        <Link href={`/learn/${room.movement.slug}`} className={TEXT_LINK}>
+          How {room.movement.name} worked
         </Link>
         {room.movement.studioOpen && (
-          <Link href={`/studio?movement=${room.movement.slug}`} className="hover:text-accent">
-            Make one in the Studio →
+          <Link href={`/studio?movement=${room.movement.slug}`} className={TEXT_LINK}>
+            Make one in the Studio
           </Link>
         )}
-        <Link href={`/exhibitions/${room.slug}`} className="hover:text-accent">
-          See this room as a list →
+        <Link href={`/exhibitions/${room.slug}`} className={TEXT_LINK}>
+          See this room as a page
         </Link>
       </div>
     </Dialog>
@@ -241,10 +265,10 @@ export function ElevatorPanel({
   const titleId = useId();
   return (
     <Dialog labelledBy={titleId} onClose={onClose}>
-      <h2 id={titleId} className="font-mono text-xs uppercase tracking-widest text-muted">
+      <h2 id={titleId} className="wall-title text-[clamp(2rem,5vw,2.75rem)]">
         Elevator
       </h2>
-      <ol className="mt-4 divide-y divide-line border-y border-line">
+      <ol className="mt-6 space-y-1">
         {[...floors].reverse().map((f) => {
           const here = f.slug === current;
           return (
@@ -253,18 +277,30 @@ export function ElevatorPanel({
                 type="button"
                 disabled={here}
                 onClick={() => onChoose(f.slug)}
-                className="grid w-full grid-cols-[3rem_1fr_auto] items-baseline gap-3 py-3 text-left hover:text-accent disabled:cursor-default disabled:text-muted disabled:hover:text-muted"
+                aria-current={here ? "page" : undefined}
+                className="group flex w-full items-center gap-4 py-1.5 text-left disabled:cursor-default"
               >
-                <span className="text-3xl font-black tabular-nums">{f.level}</span>
-                <span className="text-lg font-bold">{f.name}</span>
-                {here && <span className="text-xs">You are here</span>}
+                <span
+                  className={`grid size-11 shrink-0 place-items-center rounded-full border font-display text-lg font-bold tabular-nums transition-colors ${
+                    here
+                      ? "border-ink bg-ink text-wall"
+                      : "border-line group-hover:border-ink group-hover:bg-ink group-hover:text-wall"
+                  }`}
+                >
+                  {f.level}
+                </span>
+                <span className="font-semibold underline-offset-4 group-enabled:group-hover:underline">
+                  {f.name}
+                </span>
+                {here && <span className="ml-auto text-sm text-muted">You are here</span>}
               </button>
             </li>
           );
         })}
       </ol>
-      <Link href="/" className="mt-4 inline-block text-sm font-medium hover:text-accent">
-        Leave to the lobby →
+      <Link href="/" className={`${BUTTON} mt-8`}>
+        Leave to the lobby
+        <Arrow />
       </Link>
     </Dialog>
   );
