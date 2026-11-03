@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "art:fetch": "node scripts/fetch-public-domain-art.mjs"
   },
   "dependencies": {
     "next": "16.4.4",

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getExhibitionsOnFloor, getFloors, validateMuseum } from "@/lib/museum/registry";
+import {
+  getExhibitions,
+  getExhibitionsOnFloor,
+  getFloors,
+  validateMuseum,
+} from "@/lib/museum/registry";
 import type { Exhibition, Floor, Movement } from "@/lib/museum/types";
 import { movements } from "@/content/movements";
 
@@ -17,6 +22,17 @@ describe("museum content", () => {
     for (const floor of getFloors()) {
       expect(getExhibitionsOnFloor(floor)).toHaveLength(floor.exhibitions.length);
     }
+  });
+
+  it("hangs at least four works in every curated room", () => {
+    for (const e of getExhibitions().filter((x) => x.kind === "curated")) {
+      expect(e.artworks.length, e.slug).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("gives every movement on display at least one room", () => {
+    const shown = new Set(getExhibitions().map((e) => e.movement));
+    for (const m of movements) expect(shown.has(m.slug), m.slug).toBe(true);
   });
 
   it("builds movement prompts that include the visitor's words", () => {

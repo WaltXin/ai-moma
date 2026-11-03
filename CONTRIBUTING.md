@@ -30,6 +30,26 @@ No API keys are needed. The `mock` provider works offline.
    `src/content/floors.ts`, or add a new floor.
 4. Run `pnpm test`. `validateMuseum()` will catch broken references.
 
+## Hang a public-domain work
+
+1. Find the object on the [Art Institute of Chicago](https://www.artic.edu/collection?is_public_domain=1)
+   or [Cleveland Museum of Art](https://www.clevelandart.org/art/collection/search?only-open-access=1)
+   website. The number in its URL is its id.
+2. Add `pd("aic", <id>)` or `pd("cma", <id>)` to an exhibition's `artworks` in
+   `src/content/exhibitions.ts`.
+3. Run `pnpm art:fetch`. It downloads the image to `public/art/`, records the title, artist,
+   date, medium and credit line, and refuses the work unless it is public domain and the artist
+   died more than 70 years ago.
+4. Commit the image and `collection.generated.ts` with your change.
+
+## Draw a Studio piece with code
+
+For movements still under copyright, add a recipe to `src/lib/studio-art/styles.ts` (a
+seeded function that returns SVG markup using the movement's techniques) and hang it with
+`studio("<room>-<n>", "Title", "<recipe>")` in `exhibitions.ts`. Use system fonts only, so
+the SVG also renders in the walkable floor's canvas. Describe techniques, never copy a
+specific artwork. Curated rooms need at least 4 works; `pnpm test` checks this.
+
 ### Content rules
 
 - **Teach techniques, don't copy works.** Don't commit copyrighted artworks. Images in learn

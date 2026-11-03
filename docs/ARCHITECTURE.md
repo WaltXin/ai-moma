@@ -20,11 +20,46 @@ changes.
 `validateMuseum()` checks the content graph (unique slugs, no dangling references, every
 exhibition on exactly one floor). It runs in the test suite, so a broken contribution fails CI.
 
+## Walkable floors
+
+`/floors/[floor]/walk` shows a floor as a Gather-style 2D map. It's prerendered like the other
+floor pages:
+
+```
+floor content ──▶ buildFloorPlan()          src/lib/walk/floor-plan.ts   (server, pure)
+                    tiles, rooms, artwork positions, elevator
+              ──▶ <WalkableFloor plan>      src/components/walk/          (client)
+                    canvas renderer (draw.ts), rAF game loop, keyboard + tap-to-walk (BFS),
+                    overlays: artwork viewer, room info, elevator
+```
+
+- One room per exhibition, left to right in the floor's walking order, with paintings on the
+  room's back wall. Adding an exhibition to `floors.ts` adds a room; nobody draws maps by hand.
+- Every floor ends in a lounge (windows, sofas), widened on small floors so the map is always
+  at least 56 tiles wide.
+- The plan is plain JSON, so it can later be shared with a realtime server for multiplayer
+  presence without changing the layout code.
+- The list pages stay as the accessible, indexable version of each floor.
+
+## Public-domain collection
+
+Historic works come from museum open-access APIs, never from scraping:
+
+```
+exhibitions.ts: pd("aic", 27992) ──▶ pnpm art:fetch ──▶ public/art/aic-27992.jpg
+                                        │                 src/content/collection.generated.ts
+                                        └─ refuses unless the museum marks it CC0/public domain
+                                           AND every artist died > 70 years ago
+```
+
+`pd()` throws if a work hasn't been fetched, and `validateMuseum()` requires a credit on every
+collection image. Sources: Art Institute of Chicago (`aic`) and Cleveland Museum of Art (`cma`).
+
 ## Rendering
 
 Next.js 16 with **Cache Components** (`cacheComponents: true`) and Partial Prefetching:
 
-- Lobby, floor, exhibition and learn pages are prerendered at build time (`generateStaticParams`).
+- Lobby, floor, walk, exhibition and learn pages are prerendered at build time (`generateStaticParams`).
 - `/studio` is a partial prerender. The static header ships right away, and the form streams
   in after `connection()`, because the list of providers depends on runtime env vars.
 - `/api/generate` and `/api/submissions` are dynamic POST route handlers.
@@ -88,12 +123,24 @@ unmoderated.
 
 ## Viewers
 
-`Movement.viewer` says how a movement's works should be shown. Only `wall` is rendered today.
-Planned:
+`Movement.viewer` says how a movement's works should be shown.
 
-- **`agamograph`**: interleave 2–N frames and pick the visible frame from cursor X, touch
-  drag or `DeviceOrientationEvent`. Could be a client component with canvas or CSS strips.
-- **`room3d`**: React Three Fiber scene for walk-through galleries and 3D model artworks.
+- **`wall`**: flat on the wall.
+- **`agamograph`** ✅: artworks with a `lenticular` source carry 2–N frames. On a walkable
+  floor, the canvas slides the next view in as thin strips depending on where the visitor
+  stands (`lenticularPosition()`). Elsewhere, `<Agamograph>` (`src/components/agamograph.tsx`)
+  does the same with CSS masks, driven by pointer X, touch drag, phone tilt
+  (`DeviceOrientationEvent`, with the iOS permission prompt) or a slider.
+- **`room3d`** (planned): React Three Fiber scene for 3D model artworks.
+
+## Studio pieces drawn with code
+
+Rooms whose historic works are still under copyright hang original pieces made by recipes in
+`src/lib/studio-art/` (seeded, deterministic SVG: Fauve harbors, Constructivist posters,
+Op Art moiré, Agamograph views, …). Content declares them with
+`studio(id, title, recipe)`; `/studio-art/<id>.svg` (and `<id>.f<n>.svg` for each view)
+is a Route Handler prerendered with `generateStaticParams`. They are stand-ins until
+visitors' AI-generated work is hung.
 
 ## Decisions pending
 

@@ -61,10 +61,24 @@ export default async function ExhibitionPage(props: PageProps<"/exhibitions/[slu
         </aside>
       </header>
 
-      {movement.viewer !== "wall" && (
+      {movement.viewer === "agamograph" && (
         <p className="border border-dashed border-line p-4 text-sm text-muted">
-          Works in this movement will use the <strong>{movement.viewer}</strong> viewer, which is on
-          the roadmap. For now they hang flat on the wall.
+          Some works here are <strong>Agamographs</strong>: move your pointer across them, or drag
+          on a touch screen, and one image turns into another.{" "}
+          {floor && (
+            <>
+              <Link href={`/floors/${floor.slug}/walk`} className="font-medium text-ink underline">
+                Walk past them
+              </Link>{" "}
+              for the full effect.
+            </>
+          )}
+        </p>
+      )}
+      {movement.viewer === "room3d" && (
+        <p className="border border-dashed border-line p-4 text-sm text-muted">
+          Works in this movement will use the <strong>3D room</strong> viewer, which is on the
+          roadmap. For now they hang flat on the wall.
         </p>
       )}
 
