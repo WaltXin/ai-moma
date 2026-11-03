@@ -29,14 +29,22 @@ Rough order. Each item is a good first PR area.
 
 ## 3. Interactive viewers
 
-- [ ] **Agamograph viewer:** generate N related frames, interleave, respond to cursor, touch and tilt
+- [x] **Agamograph viewer:** N frames, interleaved strips, responds to walking, cursor, touch and tilt
 - [ ] Agamograph studio for Op & Kinetic Art
+- [x] Walkable 2D floors (Gather-style): keyboard + tap to walk, elevator, artwork viewer
+- [ ] Multiplayer presence on walkable floors (see other visitors, emoji reactions)
+- [x] Lounge at the end of every floor, so small floors don't look empty
+- [ ] Minimap and "you are here" on walkable floors
 - [ ] 3D galleries (React Three Fiber): walk a floor, artworks on walls
 - [ ] 3D model artworks (`model3d` source)
 
 ## 4. More of the museum
 
-- [ ] More movements: Cubism, Surrealism, Abstract Expressionism, Minimalism, Bauhaus, Fluxus, …
+- [x] 17 movements from Impressionism to Op Art, with public-domain works where they exist
+- [x] At least 4 works per room: code-drawn Studio pieces where works are still in copyright
+- [ ] Replace code-drawn Studio pieces with benchmarked AI generations
+- [ ] Public-domain images for Suprematism & Constructivism and Futurism (few in our sources yet)
+- [ ] More movements: Fluxus, Conceptual Art, Land Art, …
 - [ ] MDX learn pages with images (public domain or licensed only)
 - [ ] Guided tours and audio guides
 - [ ] i18n

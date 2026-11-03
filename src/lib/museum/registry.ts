@@ -1,7 +1,8 @@
 import { exhibitions as allExhibitions } from "@/content/exhibitions";
 import { floors as allFloors } from "@/content/floors";
 import { movements as allMovements } from "@/content/movements";
-import type { Exhibition, Floor, Movement } from "./types";
+import { RECIPES } from "@/lib/studio-art";
+import type { Artwork, Exhibition, Floor, Movement } from "./types";
 
 /**
  * Read-only access to museum content. Pages go through these helpers
@@ -37,6 +38,19 @@ export function getExhibitionsOnFloor(floor: Floor): Exhibition[] {
   return floor.exhibitions
     .map((slug) => getExhibition(slug))
     .filter((e): e is Exhibition => e !== undefined);
+}
+
+export function getArtwork(id: string): Artwork | undefined {
+  for (const e of allExhibitions) {
+    const found = e.artworks.find((a) => a.id === id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Every Studio piece drawn with code, for prerendering `/studio-art/*`. */
+export function getStudioArtworks(): Artwork[] {
+  return allExhibitions.flatMap((e) => e.artworks.filter((a) => a.recipe));
 }
 
 export function getFloorForExhibition(slug: string): Floor | undefined {
@@ -114,6 +128,17 @@ export function validateMuseum(
   }
   for (const e of exhibitions) {
     if (!placed.has(e.slug)) problems.push(`Exhibition "${e.slug}" is not on any floor`);
+  }
+
+  for (const e of exhibitions) {
+    for (const a of e.artworks) {
+      if (a.source.kind === "image" && a.source.src.startsWith("/art/") && !a.credit) {
+        problems.push(`Artwork "${a.id}" uses a collection image but has no credit`);
+      }
+      if (a.recipe && !(a.recipe.name in RECIPES)) {
+        problems.push(`Artwork "${a.id}" uses unknown recipe "${a.recipe.name}"`);
+      }
+    }
   }
 
   for (const m of movements) {

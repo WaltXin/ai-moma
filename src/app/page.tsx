@@ -4,6 +4,10 @@ import { getExhibitionsOnFloor, getFloors } from "@/lib/museum/registry";
 export default function LobbyPage() {
   // Elevator order: top floor first.
   const floors = getFloors().reverse();
+  // Walk in on the first floor that has art on its walls.
+  const firstHung = getFloors().find((f) =>
+    getExhibitionsOnFloor(f).some((e) => e.artworks.length > 0),
+  );
 
   return (
     <div className="space-y-16">
@@ -18,6 +22,14 @@ export default function LobbyPage() {
           Walk the floors, learn how each movement worked, make your own piece in the Studio, then
           ask to have it exhibited. AI MoMA is open source, so anyone can add a movement.
         </p>
+        {firstHung && (
+          <Link
+            href={`/floors/${firstHung.slug}/walk`}
+            className="mt-8 inline-block bg-ink px-6 py-3 text-lg font-semibold text-wall hover:bg-accent"
+          >
+            Walk in →
+          </Link>
+        )}
       </section>
 
       <section aria-labelledby="directory">
@@ -54,7 +66,11 @@ export default function LobbyPage() {
 
       <section className="grid gap-6 sm:grid-cols-3">
         {[
-          { href: "/", title: "Visit", body: "Each floor holds exhibitions from one movement." },
+          {
+            href: firstHung ? `/floors/${firstHung.slug}/walk` : "/",
+            title: "Visit",
+            body: "Walk the floors like a game. Each room holds one movement.",
+          },
           { href: "/learn", title: "Learn", body: "Short guides to how each movement worked." },
           {
             href: "/studio",

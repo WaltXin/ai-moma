@@ -30,6 +30,12 @@ export default async function FloorPage(props: PageProps<"/floors/[floor]">) {
         </p>
         <h1 className="mt-2 text-5xl font-black tracking-tight">{floor.name}</h1>
         <p className="mt-3 text-lg text-muted">{floor.tagline}</p>
+        <Link
+          href={`/floors/${floor.slug}/walk`}
+          className="mt-6 inline-block bg-ink px-5 py-3 font-semibold text-wall hover:bg-accent"
+        >
+          Walk this floor →
+        </Link>
       </header>
 
       {getExhibitionsOnFloor(floor).map((exhibition) => {
