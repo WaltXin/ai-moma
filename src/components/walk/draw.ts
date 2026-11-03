@@ -1,4 +1,5 @@
 import { seedFrom, seededRandom } from "@/lib/museum/placeholder";
+import type { FrameKind } from "@/lib/museum/frames";
 import type { PlaceholderPattern } from "@/lib/museum/types";
 import {
   FRAME_W,
@@ -14,18 +15,59 @@ import {
 
 /** Canvas renderer for a walkable floor: tiles, art on the walls, and the visitor. */
 
-const C = {
-  void: "#1b1a20",
-  wallTop: "#2b2a33",
-  wallEdge: "#3a3946",
-  face: "#f4f0e8",
-  faceShade: "#e4ddd0",
-  baseboard: "#bfb5a2",
+/**
+ * Colors that come from the floor's painted wall: the wall face the art
+ * hangs on, the dark wall tops seen from above, and the space around them.
+ */
+export type WalkTheme = {
+  face: string;
+  faceShade: string;
+  baseboard: string;
+  void: string;
+  wallTop: string;
+  wallEdge: string;
+  /** Text color on the wall, used to outline what the visitor is looking at. */
+  ink: string;
+};
+
+const hexToRgb = (hex: string) => {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/** Mixes `hex` toward `toward` by `amount` (0–1). */
+function mix(hex: string, toward: string, amount: number): string {
+  const a = hexToRgb(hex);
+  const b = hexToRgb(toward);
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * amount));
+  return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** A walk theme from a painted wall (see components/gallery/walls.ts). */
+export function walkTheme(wall: { wall: string; ink: string }): WalkTheme {
+  const [r, g, b] = hexToRgb(wall.wall);
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const dark = luma < 110;
+  // A near-black wall can't get darker tops, so they turn lighter instead.
+  const black = luma < 30;
+  return {
+    face: wall.wall,
+    faceShade: dark ? mix(wall.wall, "#ffffff", 0.07) : mix(wall.wall, "#000000", 0.07),
+    baseboard: dark ? mix(wall.wall, "#ffffff", 0.16) : mix(wall.wall, "#000000", 0.22),
+    void: black ? "#000000" : mix(wall.wall, "#141414", 0.88),
+    wallTop: black ? mix(wall.wall, "#ffffff", 0.13) : mix(wall.wall, "#141414", 0.72),
+    wallEdge: black ? mix(wall.wall, "#ffffff", 0.22) : mix(wall.wall, "#141414", 0.58),
+    ink: wall.ink,
+  };
+}
+
+const DEFAULT_THEME = walkTheme({ wall: "#f4f0e8", ink: "#141414" });
+
+const FIXED = {
   wood: "#dcc7a6",
   woodLine: "#cdb592",
   stone: "#d3cec6",
   stoneAlt: "#cac4bb",
-  frame: "#2a2118",
   label: "#f4f0e8",
   labelMuted: "#a9a6b6",
   accent: "#ff2e63",
@@ -33,6 +75,9 @@ const C = {
   steelDark: "#7d858e",
   shadow: "rgba(0,0,0,0.18)",
 };
+
+/** The palette for the frame being drawn: fixed materials plus the floor's wall. */
+let C: typeof FIXED & WalkTheme = { ...FIXED, ...DEFAULT_THEME };
 
 export type Camera = { x: number; y: number; zoom: number; dpr: number; w: number; h: number };
 
@@ -51,6 +96,7 @@ export type SceneState = {
   hoverId: string | null;
   images: Map<string, HTMLImageElement>;
   font: string;
+  theme?: WalkTheme;
 };
 
 export function drawScene(
@@ -59,6 +105,7 @@ export function drawScene(
   cam: Camera,
   s: SceneState,
 ) {
+  C = { ...FIXED, ...(s.theme ?? DEFAULT_THEME) };
   const k = cam.dpr * cam.zoom;
   ctx.setTransform(cam.dpr, 0, 0, cam.dpr, 0, 0);
   ctx.fillStyle = C.void;
@@ -319,25 +366,47 @@ function frameBox(art: PlanArtwork) {
   };
 }
 
-function drawFrameAndHighlight(
+/** How far a frame of each kind reaches beyond the picture. */
+const FRAME_REACH: Record<FrameKind, number> = { gilt: 4, black: 4, mat: 7 };
+
+/** Draws a frame like the site's: gilt, black, or a mat inside a thin frame. */
+function drawFrame(
   ctx: CanvasRenderingContext2D,
   b: { x: number; y: number; w: number; h: number },
-  phase: "frame" | "highlight",
+  kind: FrameKind,
 ) {
-  const border = 4;
-  if (phase === "frame") {
-    ctx.fillStyle = C.shadow;
-    ctx.fillRect(b.x - border + 3, b.y - border + 4, b.w + border * 2, b.h + border * 2);
-    ctx.fillStyle = C.frame;
-    ctx.fillRect(b.x - border, b.y - border, b.w + border * 2, b.h + border * 2);
-    return;
+  const ring = (inset: number, color: string) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(b.x - inset, b.y - inset, b.w + inset * 2, b.h + inset * 2);
+  };
+  const reach = FRAME_REACH[kind];
+  ctx.fillStyle = C.shadow;
+  ctx.fillRect(b.x - reach + 2, b.y - reach + 5, b.w + reach * 2, b.h + reach * 2);
+  if (kind === "gilt") {
+    ring(5, "#3b2a0e");
+    ring(4, "#c49b52");
+    ring(2.5, "#9b7634");
+    ring(1.5, "#d8b66c");
+  } else if (kind === "mat") {
+    ring(7, "#2b2622");
+    ring(5.5, "#f1ece2");
+  } else {
+    ring(4.5, "rgba(255,255,255,0.16)");
+    ring(4, "#161616");
   }
+}
+
+/** Outlines what the visitor is looking at in the wall's own ink. */
+function drawHighlight(
+  ctx: CanvasRenderingContext2D,
+  b: { x: number; y: number; w: number; h: number },
+  kind: FrameKind,
+) {
+  const out = FRAME_REACH[kind] + 4;
   ctx.save();
-  ctx.strokeStyle = C.accent;
+  ctx.strokeStyle = C.ink;
   ctx.lineWidth = 2;
-  ctx.shadowColor = C.accent;
-  ctx.shadowBlur = 8;
-  ctx.strokeRect(b.x - border - 3, b.y - border - 3, b.w + border * 2 + 6, b.h + border * 2 + 6);
+  ctx.strokeRect(b.x - out, b.y - out, b.w + out * 2, b.h + out * 2);
   ctx.restore();
 }
 
@@ -353,7 +422,7 @@ function drawLenticular(
   highlighted: boolean,
 ) {
   const b = frameBox(art);
-  drawFrameAndHighlight(ctx, b, "frame");
+  drawFrame(ctx, b, art.frame);
   const ready = (img?: HTMLImageElement) => img && img.complete && img.naturalWidth > 0;
   const base = Math.min(imgs.length - 1, Math.floor(position));
   const frac = position - base;
@@ -385,7 +454,7 @@ function drawLenticular(
   // Fold lines
   ctx.fillStyle = "rgba(0,0,0,0.12)";
   for (let i = 1; i < strips; i++) ctx.fillRect(b.x + (i * b.w) / strips, b.y, 0.6, b.h);
-  if (highlighted) drawFrameAndHighlight(ctx, b, "highlight");
+  if (highlighted) drawHighlight(ctx, b, art.frame);
 }
 
 function drawLounge(ctx: CanvasRenderingContext2D, plan: FloorPlan, font: string) {
@@ -432,7 +501,7 @@ function drawArtwork(
 ) {
   const box = frameBox(art);
   const { x, y, w, h } = box;
-  drawFrameAndHighlight(ctx, box, "frame");
+  drawFrame(ctx, box, art.frame);
 
   if (img && img.complete && img.naturalWidth > 0) {
     ctx.drawImage(img, x, y, w, h);
@@ -452,7 +521,7 @@ function drawArtwork(
     );
   }
 
-  if (highlighted) drawFrameAndHighlight(ctx, box, "highlight");
+  if (highlighted) drawHighlight(ctx, box, art.frame);
 }
 
 /** Canvas twin of the SVG placeholders in `artwork-frame.tsx`. */

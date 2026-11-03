@@ -1,3 +1,4 @@
+import { type FrameKind, frameFor } from "@/lib/museum/frames";
 import type {
   Artwork,
   ArtworkCredit,
@@ -80,6 +81,8 @@ export type PlanArtwork = {
   credit?: ArtworkCredit;
   /** Drawn with code by the Studio. */
   generative?: boolean;
+  /** Gilt, black or a mat, the same frame the site hangs it in. */
+  frame: FrameKind;
   generation?: Artwork["generation"];
   /** Left column of the frame on the wall face. */
   x: number;
@@ -203,6 +206,7 @@ export function buildFloorPlan(input: {
             : undefined,
         credit: artwork.credit,
         generative: artwork.recipe ? true : undefined,
+        frame: frameFor(artwork),
         generation: artwork.generation,
         x,
         room: index,
