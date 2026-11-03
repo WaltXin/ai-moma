@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ElevatorDoors, nextFloor } from "@/components/gallery/elevator-doors";
 import { LineHang, linesOf } from "@/components/gallery/line-hang";
 import {
   Arrow,
@@ -9,11 +10,12 @@ import {
   EmptyFrames,
   KeepHyphens,
   TEXT_LINK,
+  worksLabel,
 } from "@/components/gallery/wall-parts";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
 import { getExhibitionsOnFloor, getFloor, getFloors, getMovement } from "@/lib/museum/registry";
-import type { Exhibition, Floor } from "@/lib/museum/types";
+import type { Exhibition } from "@/lib/museum/types";
 
 export function generateStaticParams() {
   return getFloors().map((f) => ({ floor: f.slug }));
@@ -34,9 +36,7 @@ export default async function FloorPage(props: PageProps<"/floors/[floor]">) {
   const floors = getFloors();
   const rooms = getExhibitionsOnFloor(floor);
   const wall = floorWall(floor.slug);
-  // The elevator goes up, and from the top floor back down to the first.
-  const index = floors.findIndex((f) => f.slug === floor.slug);
-  const next = floors[index + 1] ?? (index > 0 ? floors[0] : undefined);
+  const next = nextFloor(floor);
 
   return (
     <WallRepaint id={`floor-${floor.slug}`} initial={wall}>
@@ -101,10 +101,6 @@ export default async function FloorPage(props: PageProps<"/floors/[floor]">) {
       </div>
     </WallRepaint>
   );
-}
-
-function worksLabel(n: number): string {
-  return n === 0 ? "No work yet" : n === 1 ? "1 work" : `${n} works`;
 }
 
 function Room({ room }: { room: Exhibition }) {
@@ -175,48 +171,5 @@ function Room({ room }: { room: Exhibition }) {
         </div>
       )}
     </article>
-  );
-}
-
-/** The end of the floor: the elevator opens onto the next one, painted in its color. */
-function ElevatorDoors({ from, to }: { from: Floor; to: Floor }) {
-  const up = to.level > from.level;
-  const preview = getExhibitionsOnFloor(to)
-    .flatMap((room) =>
-      room.artworks.slice(0, 1).map((artwork) => ({ artwork, href: `/exhibitions/${room.slug}` })),
-    )
-    .slice(0, 3);
-
-  return (
-    <section
-      data-wall=""
-      style={wallVars(floorWall(to.slug))}
-      aria-labelledby="next-floor"
-      className="py-20 md:py-28"
-    >
-      <div className="mx-auto grid max-w-6xl gap-x-10 gap-y-8 px-4 sm:px-6 md:grid-cols-12">
-        <p aria-hidden className="floor-numeral text-[clamp(6rem,14vw,11rem)] md:col-span-3">
-          {to.level}
-        </p>
-        <div className="md:col-span-9 md:self-end">
-          <h2 id="next-floor" className="wall-title text-[clamp(2.25rem,4.6vw,4.25rem)]">
-            <span className="sr-only">
-              {up ? "Next floor up" : "Back down to"}: Floor {to.level},{" "}
-            </span>
-            <KeepHyphens text={to.name} />
-          </h2>
-          <p className="mt-4 max-w-[44ch] text-lg text-muted">{to.tagline}</p>
-          <Link href={`/floors/${to.slug}`} className={`${BUTTON} mt-8`}>
-            {up ? "Up" : "Down"} to floor {to.level}
-            <Arrow direction={up ? "up" : "down"} />
-          </Link>
-        </div>
-      </div>
-      {preview.length > 0 && (
-        <div className="mt-14 md:mt-20">
-          <LineHang items={preview} slots={5} />
-        </div>
-      )}
-    </section>
   );
 }

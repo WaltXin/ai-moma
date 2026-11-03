@@ -13,11 +13,14 @@ export function Agamograph({
   frames,
   alt,
   className = "",
+  imageClassName = "",
   showControls = true,
 }: {
   frames: ImageFile[];
   alt: string;
   className?: string;
+  /** Classes for the picture itself, e.g. a frame, without wrapping the controls. */
+  imageClassName?: string;
   showControls?: boolean;
 }) {
   const max = frames.length - 1;
@@ -61,7 +64,7 @@ export function Agamograph({
   return (
     <div className={className}>
       <div
-        className="relative w-full touch-pan-y select-none"
+        className={`relative w-full touch-pan-y select-none ${imageClassName}`}
         style={{ aspectRatio: `${width} / ${height}` }}
         onPointerMove={(e) => {
           if (e.pointerType === "mouse" || e.buttons > 0 || e.pointerType === "touch") {
