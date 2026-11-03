@@ -12,6 +12,10 @@ const KEYS = ["wall", "ink", "muted", "line"] as const;
  * header, the section and the footer share one wall that eases from one color
  * to the next. Before hydration, `initial` paints the page; without
  * JavaScript, each section simply paints itself.
+ *
+ * On a client navigation the previous page's colors stay on <body> until this
+ * page paints, so the walls ease from one page to the next instead of flashing
+ * through the default theme while the page loads.
  */
 export function WallRepaint({
   id,
@@ -39,10 +43,11 @@ export function WallRepaint({
       }
     };
 
-    // Paint the first wall before going live, so nothing flashes.
-    paint(sections[0]);
+    // Going live turns on the color transition: arriving from another painted
+    // page, the walls ease over; on a first visit they already match.
     delete root.dataset.away;
     root.dataset.live = "";
+    paint(sections[0]);
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -61,7 +66,12 @@ export function WallRepaint({
       // Next keeps a visited page in the DOM, hidden. Mark it so its wall
       // colors stop applying to the page the visitor moved on to.
       root.dataset.away = "";
-      for (const key of KEYS) body.style.removeProperty(`--${key}`);
+      // Keep these colors for the next painted page to ease from. If none
+      // arrives, hand the page back to the default theme.
+      window.setTimeout(() => {
+        if (document.querySelector("[data-walls][data-live]")) return;
+        for (const key of KEYS) body.style.removeProperty(`--${key}`);
+      }, 3000);
     };
   }, []);
 

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { WallFallback } from "@/components/gallery/wall-fallback";
 import { ElevatorDoors, nextFloor } from "@/components/gallery/elevator-doors";
 import { LineHang, linesOf } from "@/components/gallery/line-hang";
 import {
@@ -29,8 +31,17 @@ export async function generateMetadata(props: PageProps<"/floors/[floor]">): Pro
   };
 }
 
-export default async function FloorPage(props: PageProps<"/floors/[floor]">) {
-  const floor = getFloor((await props.params).floor);
+export default function FloorPage(props: PageProps<"/floors/[floor]">) {
+  // The page reads its address, so it streams in behind the wall it replaces.
+  return (
+    <Suspense fallback={<WallFallback />}>
+      <FloorWalls params={props.params} />
+    </Suspense>
+  );
+}
+
+async function FloorWalls({ params }: { params: PageProps<"/floors/[floor]">["params"] }) {
+  const floor = getFloor((await params).floor);
   if (!floor) notFound();
 
   const floors = getFloors();
