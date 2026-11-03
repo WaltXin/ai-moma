@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 
@@ -11,6 +11,14 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Display face for wall lettering: a variable grotesque with a width axis, so
+// the same family sets wide exhibition titles and narrow floor numerals.
+const archivo = Archivo({
+  variable: "--font-archivo",
+  subsets: ["latin"],
+  axes: ["wdth"],
 });
 
 export const metadata: Metadata = {
@@ -30,7 +38,10 @@ const NAV = [
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${archivo.variable} h-full antialiased`}
+    >
       <body className="flex min-h-full flex-col font-sans">
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
