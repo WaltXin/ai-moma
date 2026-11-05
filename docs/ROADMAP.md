@@ -31,11 +31,12 @@ Rough order. Each item is a good first PR area.
 
 - [x] **Agamograph viewer:** N frames, interleaved strips, responds to walking, cursor, touch and tilt
 - [ ] Agamograph studio for Op & Kinetic Art
-- [x] Walkable 2D floors (Gather-style): keyboard + tap to walk, elevator, artwork viewer
+- [x] Walkable floors: keyboard + tap to walk, elevator, artwork viewer
+- [x] Perception Lab on Floor 7: hands-on stations for Agamograph folds, moiré, distorted grids and apparent motion
 - [ ] Multiplayer presence on walkable floors (see other visitors, emoji reactions)
 - [x] Lounge at the end of every floor, so small floors don't look empty
 - [ ] Minimap and "you are here" on walkable floors
-- [ ] 3D galleries (React Three Fiber): walk a floor, artworks on walls
+- [x] 3D galleries: walk a floor in first person (or step back to see yourself), lit paintings on the walls, lift doors that open
 - [ ] 3D model artworks (`model3d` source)
 
 ## 4. More of the museum

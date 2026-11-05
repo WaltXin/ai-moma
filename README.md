@@ -33,12 +33,11 @@ move, so its gallery will respond to your mouse, touch or phone tilt. The platfo
 | Area                                                 | State                                                                                |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Lobby, floors, exhibitions, learn pages              | ✅ Working, content lives in `src/content/`                                          |
-| Walkable floors (Gather-style, 2D, single player)    | ✅ `/floors/<floor>/walk`, with an elevator between floors                           |
+| Walkable floors (3D, first person, single player)    | ✅ `/floors/<floor>/walk`, with an elevator between floors                           |
 | 17 movements, Impressionism → Op Art, on 7 floors    | ✅ 47 public-domain works + 35 code-drawn Studio pieces; every room hangs at least 4 |
 | Studio → generate → request exhibition               | ✅ Working end to end with the offline **mock** provider                             |
 | Real image models (OpenAI, Google, FLUX, Qwen-Image) | 🔌 Adapter stubs; pick and implement next                                            |
 | Agamograph / lenticular viewer                       | ✅ Changes as you walk past, move the pointer, drag or tilt                          |
-| 3D walk-through galleries                            | 📝 Planned                                                                           |
 | Database, object storage, accounts, moderation       | 📝 Planned (submissions are in memory)                                               |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -89,7 +88,7 @@ src/
   app/                    Routes (Next.js App Router)
     page.tsx              Lobby + floor directory
     floors/[floor]/       A floor and its exhibitions
-    floors/[floor]/walk/  The same floor as a walkable map
+    floors/[floor]/walk/  The same floor in 3D, to walk through
     exhibitions/[slug]/   One gallery
     learn/                Education pages per movement
     studio/               Generate art, then request an exhibition
@@ -104,9 +103,9 @@ src/
     museum/               Domain types, registry, content validation
     generation/           Provider interface, registry, adapters
     submissions/          Exhibition-request schema + store
-    walk/                 Floor plan builder + pathfinding for walkable floors
+    walk/                 Floor plan builder, pathfinding, first-person movement
   components/             Shared UI (artwork frame, placeholders)
-    walk/                 Canvas renderer, game loop, viewer / elevator overlays
+    walk/                 three.js scene, walk loop, viewer / elevator overlays
 public/art/               Downloaded public-domain images
 scripts/                  `fetch-public-domain-art.mjs`
 tests/                    Vitest unit tests

@@ -10,7 +10,8 @@ import type {
 } from "@/lib/museum/types";
 
 /**
- * Turns a floor's content into a walkable tile map, Gather-style:
+ * Turns a floor's content into a walkable tile map, one metre per tile. The 3D
+ * walk (`components/walk/scene.ts`) raises walls on it; seen from above:
  *
  *   row 0      ███████████████████████████████████████   wall tops
  *   rows 1–3   █ [lift] █ [art] [art] [art] █ [art] …    wall faces (paintings hang here)
@@ -26,8 +27,6 @@ import type {
  * exhibition to `floors.ts` adds a room. The result is plain data, safe to pass
  * from a Server Component to the client.
  */
-
-export const TILE = 32;
 
 export const Tile = {
   Void: 0,
@@ -338,15 +337,4 @@ function imageOf(artwork: Artwork): ImageFile | undefined {
     return { src: f.src, width: f.width, height: f.height };
   }
   return undefined;
-}
-
-/**
- * Which view of a lenticular piece a visitor sees from column `vx`:
- * a position from 0 (leftmost view) to `frames - 1` (rightmost), changing
- * over a few steps either side of the frame's centre.
- */
-export function lenticularPosition(art: { x: number }, frames: number, vx: number): number {
-  const center = art.x + FRAME_W / 2 - 0.5;
-  const t = Math.max(0, Math.min(1, (vx - center) / 6 + 0.5));
-  return t * (frames - 1);
 }

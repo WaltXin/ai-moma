@@ -14,6 +14,7 @@ import {
   TEXT_LINK,
   worksLabel,
 } from "@/components/gallery/wall-parts";
+import { FLOOR_LABS } from "@/components/perception/perception-lab";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
 import { getExhibitionsOnFloor, getFloor, getFloors, getMovement } from "@/lib/museum/registry";
@@ -67,7 +68,7 @@ async function FloorWalls({ params }: { params: PageProps<"/floors/[floor]">["pa
                 <p className="mt-5 max-w-[44ch] text-lg text-muted md:text-xl">{floor.tagline}</p>
                 {rooms.some((r) => r.artworks.length > 0) && (
                   <Link href={`/floors/${floor.slug}/walk`} className={`${BUTTON} mt-8`}>
-                    Walk floor {floor.level}
+                    {FLOOR_LABS.has(floor.slug) ? "Step into the lab" : `Walk floor ${floor.level}`}
                     <Arrow />
                   </Link>
                 )}

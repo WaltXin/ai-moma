@@ -22,16 +22,29 @@ exhibition on exactly one floor). It runs in the test suite, so a broken contrib
 
 ## Walkable floors
 
-`/floors/[floor]/walk` shows a floor as a Gather-style 2D map. It's prerendered like the other
-floor pages:
+`/floors/[floor]/walk` is the floor in 3D: you walk through it in first person, like a visit to
+a real museum. It's prerendered like the other floor pages:
 
 ```
 floor content ──▶ buildFloorPlan()          src/lib/walk/floor-plan.ts   (server, pure)
-                    tiles, rooms, artwork positions, elevator
-              ──▶ <WalkableFloor plan>      src/components/walk/          (client)
-                    canvas renderer (draw.ts), rAF game loop, keyboard + tap-to-walk (BFS),
+                    tiles (1 tile = 1 m), rooms, artwork positions, elevator
+              ──▶ <WalkableFloor plan>      src/components/walk/walkable-floor.tsx  (client)
+                    rAF walk loop, keyboard / drag-to-look / click-to-walk / touch stick,
                     overlays: artwork viewer, room info, elevator
+                    │  movement, collisions, routes, "what am I facing"
+                    │    src/lib/walk/motion.ts   (pure, tested)
+                    ▼
+                  createMuseumScene()       src/components/walk/scene.ts   (three.js, loaded on demand)
+                    walls raised from the tiles, framed paintings under light pools,
+                    wall labels and room lettering (textures.ts), lift, lounge, avatar
 ```
+
+- The scene is built from the plan, never modelled by hand, and paints its walls in the floor's
+  color. three.js is imported dynamically, so the page shell and header arrive first.
+- Controls: drag to look; WASD / arrows (left/right turn); click the floor to walk there; click
+  a painting to walk up to it; E opens what you're facing; scroll, pinch or V steps the camera
+  back to show your avatar. Phones get a thumb stick. Without WebGL the page links to the guide.
+- In development, `window.__walk` holds the walk state, so scripts can move the visitor.
 
 - One room per exhibition, left to right in the floor's walking order, with paintings on the
   room's back wall. Adding an exhibition to `floors.ts` adds a room; nobody draws maps by hand.
@@ -40,6 +53,10 @@ floor content ──▶ buildFloorPlan()          src/lib/walk/floor-plan.ts   (
 - The plan is plain JSON, so it can later be shared with a realtime server for multiplayer
   presence without changing the layout code.
 - The list pages stay as the accessible, indexable version of each floor.
+- A floor can swap its map for a hands-on lab. Floor 7 (`perception`) does: `/floors/perception/walk`
+  renders `<PerceptionLab>` (`src/components/perception/`), four stations where the visitor makes an
+  optical effect happen and then sees how it works. Add a slug to `FLOOR_LABS` to give another floor
+  its own lab. Its floor plan is still built, so `tests/walk.test.ts` keeps checking it.
 
 ## Public-domain collection
 
@@ -130,11 +147,11 @@ unmoderated.
 
 - **`wall`**: flat on the wall.
 - **`agamograph`** ✅: artworks with a `lenticular` source carry 2–N frames. On a walkable
-  floor, the canvas slides the next view in as thin strips depending on where the visitor
-  stands (`lenticularPosition()`). Elsewhere, `<Agamograph>` (`src/components/agamograph.tsx`)
+  floor, the 3D scene turns from one view to the next as the visitor walks past
+  (`lenticularView()`). Elsewhere, `<Agamograph>` (`src/components/agamograph.tsx`)
   does the same with CSS masks, driven by pointer X, touch drag, phone tilt
   (`DeviceOrientationEvent`, with the iOS permission prompt) or a slider.
-- **`room3d`** (planned): React Three Fiber scene for 3D model artworks.
+- **`room3d`** (planned): 3D model artworks, hung in the three.js walk (`components/walk/scene.ts`).
 
 ## Studio pieces drawn with code
 

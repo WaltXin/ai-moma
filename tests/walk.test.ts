@@ -9,9 +9,20 @@ import {
   findPath,
   isElevatorTile,
   isWalkable,
-  lenticularPosition,
   tileAt,
 } from "@/lib/walk/floor-plan";
+import {
+  RADIUS,
+  artCenter,
+  atElevator,
+  collides,
+  lenticularView,
+  lookingAt,
+  move,
+  route,
+  spawnPose,
+  viewpoint,
+} from "@/lib/walk/motion";
 
 const plans = getFloors().map((floor) =>
   buildFloorPlan({
@@ -89,9 +100,9 @@ describe("floor plans", () => {
 
   it("shows the first view from the left of a lenticular piece and the last from the right", () => {
     const art = { x: 10 };
-    expect(lenticularPosition(art, 3, 0)).toBe(0);
-    expect(lenticularPosition(art, 3, 30)).toBe(2);
-    const mid = lenticularPosition(art, 3, art.x + 1);
+    expect(lenticularView(art, 3, 0)).toBe(0);
+    expect(lenticularView(art, 3, 30)).toBe(2);
+    const mid = lenticularView(art, 3, art.x + 1.5);
     expect(mid).toBeGreaterThan(0.5);
     expect(mid).toBeLessThan(1.5);
   });
@@ -101,5 +112,72 @@ describe("floor plans", () => {
     const lenticular = perception.artworks.filter((a) => a.frames);
     expect(lenticular.length).toBeGreaterThanOrEqual(3);
     for (const a of lenticular) expect(a.frames!.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("walking in 3D", () => {
+  it("starts every visitor clear of the walls, near the lift", () => {
+    for (const plan of plans) {
+      const { at } = spawnPose(plan);
+      expect(collides(plan, at), plan.floor.slug).toBe(false);
+      expect(atElevator(plan, at)).toBe(false);
+    }
+  });
+
+  it("stops at walls and slides along them", () => {
+    const plan = plans[0];
+    const { at } = spawnPose(plan);
+    // Straight at the back wall: stop a body's width short of it.
+    const stopped = move(plan, at, { x: 0, z: -20 });
+    expect(stopped.z).toBeCloseTo(ROW.roomTop + RADIUS, 2);
+    // At an angle: keep going sideways.
+    const slid = move(plan, stopped, { x: 1, z: -1 });
+    expect(slid.x).toBeCloseTo(stopped.x + 1, 5);
+    expect(slid.z).toBeCloseTo(stopped.z, 5);
+    // Never through a room's wall, even in one big jump.
+    const room = plan.rooms[0];
+    const inCorridor = { x: room.x + room.w - 1.5, z: ROW.corridorTop + 1 };
+    const jumped = move(plan, inCorridor, { x: 0, z: -5 });
+    expect(jumped.z).toBeGreaterThan(ROW.roomWall + 1);
+  });
+
+  it("can walk from the lift to stand in front of every painting, stand and the lift", () => {
+    for (const plan of plans) {
+      const { at } = spawnPose(plan);
+      const targets = [
+        ...plan.artworks.map((art) => ({ kind: "art" as const, art })),
+        ...plan.rooms.map((room) => ({ kind: "room" as const, room })),
+        { kind: "elevator" as const },
+      ];
+      for (const f of targets) {
+        const view = viewpoint(plan, f);
+        expect(collides(plan, view.at), `${plan.floor.slug}: ${f.kind}`).toBe(false);
+        const legs = route(plan, at, view.at);
+        expect(legs, `${plan.floor.slug}: ${f.kind}`).not.toBeNull();
+        // Walking the legs never clips a wall.
+        let p = at;
+        for (const leg of legs!) {
+          // Frame-sized steps, as the walk takes them.
+          for (let n = 0; n < 2000 && Math.hypot(leg.x - p.x, leg.z - p.z) > 1e-9; n++) {
+            const dx = leg.x - p.x;
+            const dz = leg.z - p.z;
+            const k = Math.min(1, 0.05 / Math.hypot(dx, dz));
+            p = move(plan, p, { x: dx * k, z: dz * k });
+          }
+          expect(Math.hypot(p.x - leg.x, p.z - leg.z)).toBeLessThan(1e-6);
+        }
+        // From there, it's what the visitor is looking at.
+        expect(lookingAt(plan, view.at, view.yaw)).toEqual(f);
+      }
+    }
+  });
+
+  it("only offers paintings you are facing", () => {
+    const plan = plans.find((p) => p.artworks.length)!;
+    const art = plan.artworks[0];
+    const view = viewpoint(plan, { kind: "art", art });
+    expect(lookingAt(plan, view.at, view.yaw)).toEqual({ kind: "art", art });
+    expect(lookingAt(plan, view.at, view.yaw + Math.PI)?.kind).not.toBe("art");
+    expect(artCenter(art).z).toBe(ROW.roomTop);
   });
 });
