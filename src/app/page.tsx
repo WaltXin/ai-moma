@@ -9,6 +9,7 @@ import {
   KeepHyphens,
   TEXT_LINK,
 } from "@/components/gallery/wall-parts";
+import { FLOOR_LABS } from "@/components/perception/perception-lab";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { LOBBY_WALL, floorWall, wallVars } from "@/components/gallery/walls";
 import {
@@ -195,7 +196,7 @@ function FloorWall({ floor }: { floor: Floor }) {
             <p className="mt-4 max-w-[42ch] text-lg text-muted">{floor.tagline}</p>
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link href={`/floors/${floor.slug}/walk`} className={BUTTON}>
-                Walk floor {floor.level}
+                {FLOOR_LABS.has(floor.slug) ? "Step into the lab" : `Walk floor ${floor.level}`}
                 <Arrow />
               </Link>
               <Link href={`/floors/${floor.slug}`} className={TEXT_LINK}>

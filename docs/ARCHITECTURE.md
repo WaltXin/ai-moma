@@ -40,6 +40,10 @@ floor content ──▶ buildFloorPlan()          src/lib/walk/floor-plan.ts   (
 - The plan is plain JSON, so it can later be shared with a realtime server for multiplayer
   presence without changing the layout code.
 - The list pages stay as the accessible, indexable version of each floor.
+- A floor can swap its map for a hands-on lab. Floor 7 (`perception`) does: `/floors/perception/walk`
+  renders `<PerceptionLab>` (`src/components/perception/`), four stations where the visitor makes an
+  optical effect happen and then sees how it works. Add a slug to `FLOOR_LABS` to give another floor
+  its own lab. Its floor plan is still built, so `tests/walk.test.ts` keeps checking it.
 
 ## Public-domain collection
 

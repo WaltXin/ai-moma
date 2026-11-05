@@ -6,6 +6,7 @@ import { WallFallback } from "@/components/gallery/wall-fallback";
 import { Elevator, FloorBadge, KeepHyphens, TEXT_LINK } from "@/components/gallery/wall-parts";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
+import { FLOOR_LABS, PerceptionLab } from "@/components/perception/perception-lab";
 import { WalkableFloor } from "@/components/walk/walkable-floor";
 import { getExhibitionsOnFloor, getFloor, getFloors, getMovements } from "@/lib/museum/registry";
 import { buildFloorPlan } from "@/lib/walk/floor-plan";
@@ -36,6 +37,9 @@ export default function WalkFloorPage(props: PageProps<"/floors/[floor]/walk">) 
 async function WalkWalls({ params }: { params: PageProps<"/floors/[floor]/walk">["params"] }) {
   const floor = getFloor((await params).floor);
   if (!floor) notFound();
+
+  // Some floors are better shown as a hands-on lab than as a map.
+  if (FLOOR_LABS.has(floor.slug)) return <PerceptionLab floor={floor} />;
 
   const floors = getFloors();
   const wall = floorWall(floor.slug);
