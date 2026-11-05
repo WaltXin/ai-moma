@@ -78,7 +78,7 @@ describe("validateMuseum", () => {
   };
 
   it("accepts a minimal valid museum", () => {
-    expect(validateMuseum([movement], [exhibition], [floor])).toEqual([]);
+    expect(validateMuseum([movement], [exhibition], [floor], [])).toEqual([]);
   });
 
   it("flags unknown movements, missing exhibitions and orphans", () => {
@@ -89,6 +89,7 @@ describe("validateMuseum", () => {
         { ...exhibition, slug: "orphan" },
       ],
       [{ ...floor, exhibitions: ["test-show", "ghost"] }],
+      [],
     );
     expect(problems).toEqual(
       expect.arrayContaining([
@@ -99,11 +100,32 @@ describe("validateMuseum", () => {
     );
   });
 
+  it("flags a world that points at a missing room or movement", () => {
+    const world = {
+      slug: "test-world",
+      title: "Test",
+      artist: "Test",
+      year: 1900,
+      heldBy: { institution: "Test", url: "https://example.org" },
+      movement: "nope",
+      room: "ghost-room",
+      intro: "",
+    };
+    const problems = validateMuseum([movement], [exhibition], [floor], [world]);
+    expect(problems).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('World "test-world" references unknown movement "nope"'),
+        expect.stringContaining('World "test-world" references unknown room "ghost-room"'),
+      ]),
+    );
+  });
+
   it("flags non-kebab-case slugs", () => {
     const problems = validateMuseum(
       [movement],
       [{ ...exhibition, slug: "Bad Slug" }],
       [{ ...floor, exhibitions: ["Bad Slug"] }],
+      [],
     );
     expect(problems).toContain('Invalid slug "Bad Slug" (use kebab-case)');
   });

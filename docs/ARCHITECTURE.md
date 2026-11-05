@@ -215,6 +215,30 @@ unmoderated.
   (`DeviceOrientationEvent`, with the iOS permission prompt) or a slider.
 - **`room3d`** (planned): 3D model artworks, hung in the three.js walk (`components/walk/scene.ts`).
 
+## Painting worlds
+
+Some paintings can be stepped into: `/worlds/<slug>` raises the painting's place as a small
+world you walk round and sit in, while other visitors stand and sit nearby, part of the scene.
+Nothing in it can be touched. The idea came from an artist: people love to sit and stare in
+museums, so give a few paintings a place to do that inside them.
+
+```
+src/content/worlds.ts          PaintingWorld: title, artist, year, where the real one hangs, its room here
+src/lib/worlds/<slug>.ts       the layout as data: ground, sky swirls, stars, village, cypress, where visitors linger
+src/components/worlds/         the scene (three.js), its brushwork (canvas), and WorldView (controls, sit, sound)
+```
+
+The first is _The Starry Night_ (`starry-night`). Its sky is one panorama painted on a canvas
+at load time: about 70,000 short strokes, each following a flow field (a rolling wave bent
+round each vortex and ringed round each star). A shader keeps the strokes sliding along that
+flow, so the sky never stops moving. The hills, houses and cypress are lit meshes painted
+with tiles of brushwork.
+
+**No photograph of the painting is used**, not even a public-domain one. The world is an
+interpretation drawn with code, and the welcome says where the real painting hangs. Only
+public-domain paintings get a world. A room links to its worlds (`getWorldsForRoom`), and
+`validateMuseum()` checks that each world's movement and room exist.
+
 ## Studio pieces drawn with code
 
 Rooms whose historic works are still under copyright hang original pieces made by recipes in

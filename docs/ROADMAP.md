@@ -41,6 +41,10 @@ Rough order. Each item is a good first PR area.
 - [x] One real building: enter from the street, lobby with grand stair, a skylit atrium with stairs across it and a glass lift, enfiladed galleries, a sculpture terrace with a living wall, other visitors
 - [x] Up close: a painting grows off the wall into a full-screen viewer you can zoom into, brushstroke by brushstroke
 - [x] Baked light: laylights, downlights, windows and the atrium's skylight traced round every floor, with two bounces
+- [x] Step into a painting: _The Starry Night_ as a hill you walk and sit on, under a sky that keeps moving
+- [ ] More painting worlds (public domain only): Wheat Field with Cypresses, Seurat's Grande Jatte, Monet's water lilies
+- [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)
+- [ ] VR for the most-loved worlds (WebXR)
 - [ ] Guided looking: an expert's tour through one painting, zooming to each detail as they explain it
 - [ ] Day and night: follow the clock past opening hours (the building keeps daylight hours for now)
 - [ ] Better performance on low-end phones (merge visitors, lower-detail far floors)

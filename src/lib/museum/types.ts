@@ -142,3 +142,23 @@ export type Floor = {
   /** Exhibition slugs on this floor, in walking order. */
   exhibitions: Slug[];
 };
+
+/**
+ * A painting raised into a small world a visitor can walk into and stay
+ * in: not a copy of the picture, but its place, light and weather, drawn
+ * with code. Other visitors are part of the scene; nothing in it is touched.
+ */
+export type PaintingWorld = {
+  slug: Slug;
+  /** The painting it comes from. */
+  title: string;
+  artist: string;
+  year: number;
+  /** Where the painting itself hangs; shown on the way in. */
+  heldBy: { institution: string; url: string };
+  movement: Slug;
+  /** The room in this museum to come back to. */
+  room: Slug;
+  /** One or two sentences on the way in. */
+  intro: string;
+};
