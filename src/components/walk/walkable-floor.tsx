@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Arrow } from "@/components/gallery/wall-parts";
 import type { Wall } from "@/components/gallery/walls";
-import type { FloorPlan } from "@/lib/walk/floor-plan";
+import { type FloorPlan, ROW } from "@/lib/walk/floor-plan";
 import {
   EYE,
   type Focus,
   type Vec,
   atElevator,
   collides,
+  elevatorCenter,
   focusKey,
   forward,
   lookingAt,
@@ -22,6 +23,8 @@ import {
   viewpoint,
   yawToward,
 } from "@/lib/walk/motion";
+import { STEP, moodFor, surfaceAt } from "@/lib/walk/music";
+import { getAudio, hasEntered, markEntered, soundPreferred, startAudio } from "./audio";
 import type { MuseumScene } from "./scene";
 import { mix } from "./textures";
 import { ArtworkViewer, ElevatorPanel, RoomInfo } from "./walk-overlays";
@@ -34,6 +37,10 @@ import { ArtworkViewer, ElevatorPanel, RoomInfo } from "./walk-overlays";
  *
  * The three.js scene (`scene.ts`) loads on demand, so the page shell and its
  * text arrive first. Movement and collisions come from `lib/walk/motion.ts`.
+ *
+ * A visit starts inside the lift: "Enter" starts the sound (`audio.ts`), the
+ * doors open and the visitor steps out. Taking the lift to another floor
+ * fades out and arrives the same way there, without asking again.
  */
 
 /** Metres per second. */
@@ -77,6 +84,20 @@ const approach = (a: number, b: number, step: number) => {
 const keyOf = (e: KeyboardEvent) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
 
 type Mode = "loading" | "ready" | "unsupported";
+/** Waiting in the lift for "Enter", stepping out, walking freely, or leaving by lift. */
+type Phase = "waiting" | "arriving" | "free" | "leaving";
+
+/** The arrival, in seconds: chime, doors, step out, then look down the corridor. */
+const ARRIVAL = {
+  chime: 0.25,
+  doors: 0.9,
+  walkFrom: 1.5,
+  walkTo: 5.2,
+  turnFrom: 3.2,
+  turnTo: 5.6,
+  end: 6,
+};
+const smooth = (t: number) => t * t * (3 - 2 * t);
 
 export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
   const router = useRouter();
@@ -94,6 +115,12 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
   const [touch, setTouch] = useState(false);
   const [canFullscreen, setCanFullscreen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  // On the floor you arrive at by lift, the welcome has already been said.
+  const [phase, setPhase] = useState<Phase>(() => (hasEntered() ? "arriving" : "waiting"));
+  const [sound, setSound] = useState(true);
+  const [hasAudio, setHasAudio] = useState(false);
+  /** Black over the view: fading in on arrival, out on leaving. */
+  const [veil, setVeil] = useState(true);
 
   // Walking state lives in a ref so the animation loop doesn't re-render React.
   const game = useRef<{
@@ -119,12 +146,18 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
     /** Camera distance behind the visitor, and where it's easing to. */
     zoom: number;
     zoomTo: number;
+    phase: Phase;
+    /** Seconds into the arrival. */
+    clock: number;
+    /** Footfalls so far, to sound each new one. */
+    steps: number;
+    nearLift: boolean;
   }>(null);
   if (game.current == null) {
-    const spawn = spawnPose(plan);
+    // Every visit starts in the lift, facing its doors from inside.
     game.current = {
-      pos: spawn.at,
-      yaw: spawn.yaw,
+      pos: liftCab(plan),
+      yaw: Math.PI,
       pitch: 0,
       vel: { x: 0, z: 0 },
       keys: new Set(),
@@ -142,6 +175,10 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       pinch: null,
       zoom: 0,
       zoomTo: 0,
+      phase: hasEntered() ? "arriving" : "waiting",
+      clock: 0,
+      steps: 0,
+      nearLift: false,
     };
   }
 
@@ -161,6 +198,60 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
     setOverlay(null);
     containerRef.current?.focus({ preventScroll: true });
   }, []);
+
+  /** Done stepping out (or skipped it): hand the visitor the controls. */
+  const finishArrival = useCallback(() => {
+    const g = game.current!;
+    if (g.phase !== "arriving") return;
+    const spawn = spawnPose(plan);
+    g.pos = spawn.at;
+    g.yaw = spawn.yaw;
+    g.phase = "free";
+    setPhase("free");
+  }, [plan]);
+
+  /** The welcome's buttons: start the sound (a click is what browsers need) and step out. */
+  const enter = (withSound: boolean) => {
+    const audio = startAudio();
+    audio?.setMuted(!withSound);
+    audio?.play(moodFor(plan.floor.slug));
+    setSound(withSound && Boolean(audio));
+    markEntered();
+    const g = game.current!;
+    g.phase = "arriving";
+    g.clock = 0;
+    setPhase("arriving");
+    containerRef.current?.focus({ preventScroll: true });
+  };
+
+  const toggleSound = useCallback(() => {
+    const audio = startAudio();
+    if (!audio) return;
+    const on = audio.muted;
+    audio.setMuted(!on);
+    audio.play(moodFor(plan.floor.slug));
+    setSound(on);
+  }, [plan.floor.slug]);
+
+  /** Into the lift: doors and chime, fade to black, then the next floor. */
+  const leaveFor = (slug: string) => {
+    const g = game.current!;
+    g.overlay = null;
+    setOverlay(null);
+    g.phase = "leaving";
+    setPhase("leaving");
+    const audio = getAudio();
+    audio?.doors(0, 0.8, false);
+    audio?.chime(0, 0.7);
+    setVeil(true);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.setTimeout(() => router.push(`/floors/${slug}/walk`), reduced ? 0 : 900);
+  };
+
+  // Up close to a painting, the music steps back.
+  useEffect(() => {
+    getAudio()?.focus(overlay?.kind === "art");
+  }, [overlay]);
 
   const roomArt = useCallback(
     (room: number) => plan.artworks.filter((a) => a.room === room),
@@ -214,7 +305,9 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       }
       sceneRef.current = scene;
       // Lets a browser console (or a test script) move the visitor around while developing.
-      if (process.env.NODE_ENV === "development") Object.assign(window, { __walk: g });
+      if (process.env.NODE_ENV === "development") {
+        Object.assign(window, { __walk: g, __audio: getAudio });
+      }
 
       const resize = () => {
         const { width, height } = container.getBoundingClientRect();
@@ -228,11 +321,45 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       let last = performance.now();
       let lastPlace = "";
       const tick = (now: number) => {
-        const dt = Math.min(0.05, (now - last) / 1000);
+        const real = Math.min(0.25, (now - last) / 1000);
+        const dt = Math.min(0.05, real);
         last = now;
         const k = g.keys;
+        const strideAtStart = g.stride;
+        const audio = getAudio();
+        const spawn = spawnPose(plan);
+        const lift = elevatorCenter(plan);
+        let liftDoors: number | undefined;
 
-        if (!g.overlay) {
+        if (g.phase === "arriving") {
+          const t0 = g.clock;
+          // Real time, so a slow device doesn't drag the arrival out.
+          g.clock += real;
+          const t = g.clock;
+          const crossed = (at: number) => t0 < at && t >= at;
+          if (crossed(ARRIVAL.chime)) audio?.chime(0, 0.9);
+          if (crossed(ARRIVAL.doors)) audio?.doors(0, 0.9, true);
+          liftDoors = t < ARRIVAL.doors ? 0 : 1;
+          if (reduced && t >= ARRIVAL.doors + 0.6) g.clock = ARRIVAL.end;
+          const cab = liftCab(plan);
+          const w = smooth(
+            Math.max(0, Math.min(1, (t - ARRIVAL.walkFrom) / (ARRIVAL.walkTo - ARRIVAL.walkFrom))),
+          );
+          const before = g.pos;
+          g.pos = { x: cab.x + (spawn.at.x - cab.x) * w, z: cab.z + (spawn.at.z - cab.z) * w };
+          g.stride += Math.hypot(g.pos.x - before.x, g.pos.z - before.z);
+          // Turn to look down the corridor while still walking out, not after.
+          const turn = smooth(
+            Math.max(0, Math.min(1, (t - ARRIVAL.turnFrom) / (ARRIVAL.turnTo - ARRIVAL.turnFrom))),
+          );
+          g.yaw = Math.PI + angleDiff(Math.PI, spawn.yaw) * turn;
+          if (g.clock >= ARRIVAL.end) finishArrival();
+        } else if (g.phase !== "free") {
+          liftDoors = g.phase === "waiting" ? 0 : undefined;
+        }
+        const walking = g.phase === "free";
+
+        if (!g.overlay && walking) {
           g.yaw += ((k.has("ArrowLeft") ? 1 : 0) - (k.has("ArrowRight") ? 1 : 0)) * TURN * dt;
         }
         let ahead =
@@ -247,7 +374,7 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
         }
 
         let want: Vec = { x: 0, z: 0 };
-        if (g.overlay) {
+        if (g.overlay || !walking) {
           // Stand still while something is open.
         } else if (amount > 0.05) {
           g.legs = [];
@@ -289,7 +416,7 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
         const ease = 1 - Math.exp(-dt * 10);
         g.vel = { x: g.vel.x + (want.x - g.vel.x) * ease, z: g.vel.z + (want.z - g.vel.z) * ease };
         const before = g.pos;
-        g.pos = move(plan, g.pos, { x: g.vel.x * dt, z: g.vel.z * dt });
+        if (walking) g.pos = move(plan, g.pos, { x: g.vel.x * dt, z: g.vel.z * dt });
         const moved = Math.hypot(g.pos.x - before.x, g.pos.z - before.z);
         g.stride += moved;
 
@@ -303,9 +430,21 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
         } else g.stuck = 0;
 
         // Walking right up to the lift calls it.
-        const atLift = atElevator(plan, g.pos);
+        const atLift = walking && atElevator(plan, g.pos);
         if (atLift && !g.atLift && !g.overlay) open({ kind: "elevator" });
         g.atLift = atLift;
+
+        // The lift doors open as you come near, with their chime, heard from where they are.
+        const toLift = { x: lift.x - g.pos.x, z: lift.z - g.pos.z };
+        const liftDist = Math.hypot(toLift.x, toLift.z);
+        const nearLift = liftDist < 2.4;
+        if (walking && nearLift !== g.nearLift && audio) {
+          const f = forward(g.yaw);
+          const pan = (-f.z * toLift.x + f.x * toLift.z) / (liftDist || 1);
+          if (nearLift) audio.chime(pan, 0.5);
+          audio.doors(pan, 0.6, nearLift);
+        }
+        g.nearLift = nearLift;
 
         const f = g.overlay ? g.focus : lookingAt(plan, g.pos, g.yaw);
         if (focusKey(f) !== focusKey(g.focus)) {
@@ -318,7 +457,16 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
           setPlace(here);
         }
 
-        const pace = Math.min(1, moved / dt / WALK);
+        // How fast the visitor is going, by their own feet or stepping out of the lift.
+        const pace = Math.min(1, (g.stride - strideAtStart) / dt / WALK);
+        // A footfall every stride, on whatever is underfoot.
+        const steps = Math.floor(g.stride / STEP);
+        if (steps !== g.steps) {
+          g.steps = steps;
+          if (pace > 0.2 && g.zoom < 0.5) {
+            audio?.footstep(surfaceAt(plan, g.pos), Math.min(1, 0.45 + pace * 0.55));
+          }
+        }
         const bob = reduced ? 0 : Math.sin(g.stride * 4.2) * 0.022 * pace;
         g.zoom += (g.zoomTo - g.zoom) * (reduced ? 1 : Math.min(1, dt * 8));
         scene!.render({
@@ -333,6 +481,8 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
           zoom: g.zoom,
           stride: g.stride,
           pace,
+          lift: liftDoors,
+          rush: walking && k.has("Shift") ? Math.min(1, pace) : 0,
         });
         raf = requestAnimationFrame(tick);
       };
@@ -340,7 +490,12 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       // The on-screen controls depend on the device, so they appear with the scene.
       setTouch(window.matchMedia("(pointer: coarse)").matches);
       setCanFullscreen(Boolean(document.fullscreenEnabled));
+      setHasAudio(typeof window.AudioContext === "function");
+      setSound(getAudio() ? !getAudio()!.muted : soundPreferred());
       setMode("ready");
+      setVeil(false);
+      // Arriving by lift from another floor: this floor's music takes over.
+      if (g.phase === "arriving") getAudio()?.play(moodFor(plan.floor.slug));
     };
     void start();
 
@@ -350,8 +505,10 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       ro?.disconnect();
       scene?.dispose();
       sceneRef.current = null;
+      // Leaving the walk: let this floor's music fade (another floor's lift will start its own).
+      getAudio()?.release(moodFor(plan.floor.slug));
     };
-  }, [plan, wall, open, placeName]);
+  }, [plan, wall, open, placeName, finishArrival]);
 
   // Keyboard.
   useEffect(() => {
@@ -380,6 +537,13 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       }
       if (!isActive() || e.metaKey || e.ctrlKey || e.altKey) return;
       const key = keyOf(e);
+      if (key === "m") return toggleSound();
+      if (g.phase === "arriving") {
+        // Any key skips the walk out of the lift.
+        finishArrival();
+        return;
+      }
+      if (g.phase !== "free") return;
       if (MOVE_KEYS.has(key)) {
         if (key !== "Shift") e.preventDefault();
         g.keys.add(key);
@@ -402,7 +566,7 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
       window.removeEventListener("keyup", onUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [close, open, roomArt]);
+  }, [close, open, roomArt, toggleSound, finishArrival]);
 
   useEffect(() => {
     containerRef.current?.focus({ preventScroll: true });
@@ -469,7 +633,8 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const g = game.current!;
-    if (g.overlay) return;
+    if (g.overlay || g.phase === "waiting" || g.phase === "leaving") return;
+    if (g.phase === "arriving") return finishArrival();
     if (g.drag && !g.pinch && e.pointerType === "touch") {
       const d = g.drag;
       d.moved = true;
@@ -605,7 +770,54 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
           </div>
         )}
 
-        {mode === "ready" && (
+        {/* A soft vignette, like the edges of your own vision. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgb(0_0_0/0.38))]"
+        />
+
+        {mode === "ready" && phase === "waiting" && (
+          <div className="absolute inset-0 grid place-items-center bg-black/40 p-4">
+            <div className={`w-full max-w-sm px-6 py-7 text-center ${PLAQUE_BASE}`}>
+              <p className="text-sm font-semibold tracking-wide text-muted">
+                Floor {plan.floor.level}
+              </p>
+              <h2 className="wall-title mt-1 text-[clamp(1.75rem,6vw,2.5rem)]">
+                {plan.floor.name}
+              </h2>
+              <p className="mt-2 text-muted">{plan.floor.tagline}</p>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => enter(true)}
+                className="mt-6 inline-flex items-center gap-2 bg-ink px-5 py-3 font-semibold text-wall transition-colors hover:bg-accent hover:text-white"
+              >
+                Enter with sound
+                <Arrow />
+              </button>
+              <p className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => enter(false)}
+                  className="text-sm font-semibold underline underline-offset-4"
+                >
+                  Enter without sound
+                </button>
+              </p>
+              <p className="mt-4 text-xs text-muted">
+                Music is composed live as you walk. Headphones recommended.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Fades the view in on arrival, and out when you take the lift. */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 bg-black transition-opacity duration-700 ${veil ? "opacity-100" : "opacity-0"}`}
+        />
+
+        {mode === "ready" && phase !== "waiting" && (
           <>
             {/* Where you are aiming; E opens what's under it. */}
             <div
@@ -618,13 +830,26 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
                 {place}
               </p>
               <div className="flex flex-wrap justify-end gap-2">
+                {hasAudio && (
+                  <button
+                    type="button"
+                    onClick={toggleSound}
+                    aria-pressed={sound}
+                    title="Sound (M)"
+                    className={`pointer-events-auto ${PLAQUE} hover:bg-ink hover:text-wall`}
+                  >
+                    {sound ? "Sound on" : "Sound off"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setHelp((h) => !h)}
                   aria-expanded={help}
+                  aria-label="Controls"
                   className={`pointer-events-auto ${PLAQUE} hover:bg-ink hover:text-wall`}
                 >
-                  Controls
+                  <span className="sm:hidden">?</span>
+                  <span className="max-sm:hidden">Controls</span>
                 </button>
                 {canFullscreen && (
                   <button
@@ -646,7 +871,15 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
               </div>
             </div>
 
-            {(help || (hint && !focus)) && (
+            {phase === "arriving" && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-3">
+                <p className={`px-3.5 py-2 text-sm ${PLAQUE_BASE}`}>
+                  {touch ? "Tap" : "Press any key"} to step straight out
+                </p>
+              </div>
+            )}
+
+            {phase === "free" && (help || (hint && !focus)) && (
               <div
                 className={`pointer-events-none absolute inset-x-0 flex justify-center px-3 ${touch ? "bottom-40" : "bottom-4"}`}
               >
@@ -665,14 +898,15 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
                       <Kbd>S</Kbd>
                       <Kbd>D</Kbd> or the arrow keys (hold <Kbd>Shift</Kbd> to hurry), or click the
                       floor to walk there. Click a painting to go up to it, then press <Kbd>E</Kbd>.
-                      Scroll (or <Kbd>V</Kbd>) to step back and see yourself.
+                      Scroll (or <Kbd>V</Kbd>) to step back and see yourself; <Kbd>M</Kbd> turns the
+                      sound on or off.
                     </>
                   )}
                 </div>
               </div>
             )}
 
-            {focus && focusLabel && !overlay && (
+            {phase === "free" && focus && focusLabel && !overlay && (
               <div
                 className={`absolute flex justify-center px-3 ${touch ? "right-0 bottom-6 left-36" : "inset-x-0 bottom-4"}`}
               >
@@ -688,7 +922,7 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
               </div>
             )}
 
-            {touch && (
+            {touch && phase === "free" && (
               <Stick
                 onChange={(x, y) => {
                   game.current!.stick = { x, y };
@@ -714,7 +948,7 @@ export function WalkableFloor({ plan, wall }: { plan: FloorPlan; wall: Wall }) {
         <ElevatorPanel
           floors={plan.floors}
           current={plan.floor.slug}
-          onChoose={(slug) => router.push(`/floors/${slug}/walk`)}
+          onChoose={leaveFor}
           onClose={close}
         />
       )}
@@ -782,4 +1016,9 @@ function Kbd({ children }: { children: React.ReactNode }) {
       {children}
     </kbd>
   );
+}
+
+/** Where the visitor stands inside the lift car, behind its doors. */
+function liftCab(plan: FloorPlan): Vec {
+  return { x: elevatorCenter(plan).x, z: ROW.roomTop - 0.75 };
 }

@@ -56,6 +56,10 @@ export type ViewState = {
   /** Metres walked, for the stride, and how fast (0–1) they're walking now. */
   stride: number;
   pace: number;
+  /** Holds the lift doors open (1) or shut (0); otherwise they open as you come near. */
+  lift?: number;
+  /** 0–1: how hard the visitor is hurrying, which widens the view a touch. */
+  rush: number;
 };
 
 export type Pick = { focus: Focus } | { floor: Vec } | null;
@@ -613,10 +617,17 @@ export function createMuseumScene(
 
   // ── The lift ───────────────────────────────────────────────────────────
   const steel = std({ color: 0xb9bec4, metalness: 0.9, roughness: 0.28 });
-  const cab = new THREE.Mesh(
-    box(opening.x1 - opening.x0, opening.h, 1.4),
-    std({ color: 0x8c7a62, metalness: 0.5, roughness: 0.45, side: THREE.BackSide }),
-  );
+  // Oak-panelled inside, warm under its own light: where every visit begins.
+  // No wall on the door side (box face +z), so the open doors show the floor outside.
+  const cabWood = std({ map: woodTex, color: 0xc9a77c, roughness: 0.45, side: THREE.BackSide });
+  const cab = new THREE.Mesh(box(opening.x1 - opening.x0, opening.h, 1.4), [
+    cabWood,
+    cabWood,
+    cabWood,
+    cabWood,
+    hidden,
+    cabWood,
+  ]);
   cab.position.set(lift.x, opening.h / 2, ROW.roomTop - 0.7);
   scene.add(cab);
   const cabLight = new THREE.Mesh(plane(1.1, 0.8), glow);
@@ -637,7 +648,13 @@ export function createMuseumScene(
   const rightDoor = new THREE.Mesh(doorGeo, steel);
   leftDoor.position.set(lift.x - 0.4, opening.h / 2, ROW.roomTop - 0.03);
   rightDoor.position.set(lift.x + 0.4, opening.h / 2, ROW.roomTop - 0.03);
-  scene.add(leftDoor, rightDoor);
+  // The seam where the doors meet, and a brass handrail at the back of the car.
+  const seam = new THREE.Mesh(box(0.012, opening.h, 0.05), railMat);
+  seam.position.set(0.4, 0, 0);
+  leftDoor.add(seam);
+  const handrail = new THREE.Mesh(box(opening.x1 - opening.x0 - 0.2, 0.04, 0.04), giltMat);
+  handrail.position.set(lift.x, 0.95, ROW.roomTop - 1.36);
+  scene.add(leftDoor, rightDoor, handrail);
   const indicator = new THREE.Mesh(
     plane(0.5, 0.19),
     basic({ map: tex(floorIndicator(plan.floor.level, fonts)), toneMapped: false }),
@@ -792,6 +809,52 @@ export function createMuseumScene(
   avatar.visible = false;
   scene.add(avatar);
 
+  // ── Dust in the light ──────────────────────────────────────────────────
+  const dustSeeds: {
+    x: number;
+    y: number;
+    z: number;
+    speed: number;
+    phase: number;
+    rise: number;
+  }[] = [];
+  {
+    const rand = seededRandom(91);
+    for (const room of plan.rooms) {
+      for (let i = 0; i < 70; i++) {
+        dustSeeds.push({
+          x: room.x + 1 + rand() * (room.w - 2),
+          y: rand() * CEILING,
+          z: ROW.roomTop + 0.6 + rand() * (ROW.roomBottom - ROW.roomTop),
+          speed: 0.05 + rand() * 0.12,
+          phase: rand() * 7,
+          rise: 0.006 + rand() * 0.014,
+        });
+      }
+    }
+  }
+  const dustGeo = keep(new THREE.BufferGeometry());
+  dustGeo.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(new Float32Array(dustSeeds.length * 3), 3),
+  );
+  const motes = new THREE.Points(
+    dustGeo,
+    keep(
+      new THREE.PointsMaterial({
+        map: poolTex,
+        color: 0xfff1d6,
+        size: 0.035,
+        transparent: true,
+        opacity: dark ? 0.55 : 0.35,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    ),
+  );
+  motes.frustumCulled = false;
+  scene.add(motes);
+
   // ── Walk-to marker ─────────────────────────────────────────────────────
   const marker = new THREE.Mesh(
     keep(new THREE.RingGeometry(0.16, 0.22, 40)),
@@ -802,6 +865,7 @@ export function createMuseumScene(
   scene.add(marker);
 
   const raycaster = new THREE.Raycaster();
+  let baseFov = 66;
   const ndc = new THREE.Vector2();
 
   return {
@@ -810,7 +874,8 @@ export function createMuseumScene(
       renderer.setSize(width, height, false);
       camera.aspect = width / Math.max(1, height);
       // A taller frame on phones needs a wider vertical view to feel the same.
-      camera.fov = camera.aspect < 1 ? 78 : 66;
+      baseFov = camera.aspect < 1 ? 78 : 66;
+      camera.fov = baseFov;
       camera.updateProjectionMatrix();
     },
 
@@ -854,7 +919,27 @@ export function createMuseumScene(
 
       // Lift doors slide open as you come near.
       const near = Math.hypot(s.pos.x - lift.x, s.pos.z - lift.z) < 2.4 ? 1 : 0;
-      doorsOpen += (near - doorsOpen) * 0.08;
+      doorsOpen += ((s.lift ?? near) - doorsOpen) * 0.06;
+
+      const fov = baseFov + s.rush * 5;
+      if (Math.abs(camera.fov - fov) > 0.01) {
+        camera.fov += (fov - camera.fov) * 0.1;
+        camera.updateProjectionMatrix();
+      }
+
+      // Dust turning slowly in the skylights' light.
+      const dust = dustGeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < dustSeeds.length; i++) {
+        const d = dustSeeds[i];
+        const t = s.time * d.speed + d.phase;
+        dust.setXYZ(
+          i,
+          d.x + Math.sin(t) * 0.35,
+          0.4 + ((d.y + s.time * d.rise) % (CEILING - 0.8)),
+          d.z + Math.cos(t * 0.8) * 0.35,
+        );
+      }
+      dust.needsUpdate = true;
       const slide = doorsOpen * 0.78;
       leftDoor.position.x = lift.x - 0.4 - slide;
       rightDoor.position.x = lift.x + 0.4 + slide;
