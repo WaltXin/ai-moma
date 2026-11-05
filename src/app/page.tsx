@@ -37,10 +37,17 @@ const SALON: { id: string; d: string; m?: string }[] = [
   { id: "aic-8991", d: "1 / 8 / 3 / 10", m: "3 / 1 / 5 / 3" }, // Kandinsky, Improvisation 30
   { id: "cma-143278", d: "1 / 10 / 2 / 11", m: "5 / 3 / 6 / 4" }, // Mondrian
   { id: "angles-of-view-6", d: "2 / 10 / 3 / 11", m: "6 / 3 / 7 / 4" }, // Studio, Swelling Grid
-  { id: "aic-80607", d: "1 / 11 / 3 / 13", m: "5 / 1 / 7 / 3" }, // van Gogh, Self-Portrait
+  { id: "nga-106382", d: "1 / 11 / 3 / 13", m: "5 / 1 / 7 / 3" }, // van Gogh, Self-Portrait
   { id: "aic-20684", d: "3 / 8 / 5 / 11" }, // Caillebotte, Paris Street; Rainy Day
   { id: "cma-136595", d: "3 / 11 / 5 / 13", m: "5 / 4 / 7 / 7" }, // Marc, Tiger
 ];
+
+/** "A, B and C". */
+function listOf(items: string[]): string {
+  return items.length < 2
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
 
 /** How much of the viewport a grid area spans, for responsive image sizes. */
 function slotSizes(d: string, m?: string): string {
@@ -81,6 +88,12 @@ export default function LobbyPage() {
 
   const works = exhibitions.flatMap((e) => e.artworks);
   const publicDomain = works.filter((a) => a.credit).length;
+  // "the Art Institute of Chicago, …, the Metropolitan Museum of Art and …"
+  const lenders = listOf(
+    [...new Set(works.flatMap((a) => (a.credit ? [a.credit.institution] : [])))].map(
+      (name) => `the ${name.replace(/^The /, "")}`,
+    ),
+  );
   const studioPieces = works.filter((a) => a.recipe).length;
   const salon = SALON.map((s) => ({ ...s, artwork: getArtwork(s.id) })).filter(
     (s): s is typeof s & { artwork: Artwork } => s.artwork !== undefined,
@@ -132,10 +145,7 @@ export default function LobbyPage() {
                 </p>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-3 max-md:order-first">
                   {firstHung && (
-                    <Link
-                      href="/walk"
-                      className={`${BUTTON} px-6 py-3.5 text-lg`}
-                    >
+                    <Link href="/walk" className={`${BUTTON} px-6 py-3.5 text-lg`}>
                       Walk in
                       <Arrow />
                     </Link>
@@ -149,8 +159,7 @@ export default function LobbyPage() {
 
             <p className="border-t border-line py-5 text-sm text-muted">
               {floors.length} floors · {getMovements().length} movements · {publicDomain}{" "}
-              public-domain works from the Art Institute of Chicago and the Cleveland Museum of Art
-              · {studioPieces} Studio pieces drawn in code
+              public-domain works from {lenders}· {studioPieces} Studio pieces drawn in code
             </p>
           </div>
         </section>

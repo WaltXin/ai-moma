@@ -123,7 +123,16 @@ exhibitions.ts: pd("aic", 27992) ──▶ pnpm art:fetch ──▶ public/art/a
 `pd()` throws if a work hasn't been fetched, and `validateMuseum()` requires a credit on every
 collection image. The zoom copy is the largest the museum serves to anyone (AIC's IIIF server
 stops at 3000 px; CMA's "print" image), re-encoded with `sharp` to about a megabyte. Works whose
-museum has nothing much bigger than the wall image get no zoom copy. Sources: Art Institute of Chicago (`aic`) and Cleveland Museum of Art (`cma`).
+museum has nothing much bigger than the wall image get no zoom copy.
+
+| Source | Museum                         | Metadata                                                                  | Images                                                                                    |
+| ------ | ------------------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `aic`  | Art Institute of Chicago       | JSON API                                                                  | IIIF, up to 3000 px                                                                       |
+| `cma`  | Cleveland Museum of Art        | JSON API                                                                  | "web" and "print" JPEGs                                                                   |
+| `met`  | The Metropolitan Museum of Art | JSON API                                                                  | The original (often 4000–8000 px), cut down to both copies; its web image is only ~600 px |
+| `nga`  | National Gallery of Art        | Daily CSV exports on GitHub, cached in `node_modules/.cache/ai-moma/nga/` | IIIF, originals often 10,000 px or more                                                   |
+
+Images of works no longer in `exhibitions.ts` are deleted from `public/art/`.
 
 ## Rendering
 

@@ -98,7 +98,7 @@ src/
     api/submissions/      POST: request an exhibition
   content/                ← the museum's content (most contributions go here)
     movements/            One file per art movement
-    exhibitions.ts        Rooms; historic works are pd("aic" | "cma", id)
+    exhibitions.ts        Rooms; historic works are pd("aic" | "cma" | "met" | "nga", id)
     floors.ts
     collection.generated.ts  Written by `pnpm art:fetch`
   lib/
@@ -134,8 +134,10 @@ collects, and marks which ones are still open.
 - We teach **styles and techniques**, not copies. Don't add copyrighted artworks to the repo,
   and don't write prompts that name a living artist to imitate them.
 - Historic works on the walls are **public domain**: released under CC0 by the
-  [Art Institute of Chicago](https://www.artic.edu/open-access/open-access-images) and the
-  [Cleveland Museum of Art](https://www.clevelandart.org/open-access), by artists who died
+  [Art Institute of Chicago](https://www.artic.edu/open-access/open-access-images), the
+  [Cleveland Museum of Art](https://www.clevelandart.org/open-access), the
+  [Metropolitan Museum of Art](https://www.metmuseum.org/policies/image-resources) and the
+  [National Gallery of Art](https://www.nga.gov/artworks/free-images-and-open-access), by artists who died
   more than 70 years ago. `pnpm art:fetch` refuses anything else. Movements still under
   copyright (Surrealism, Abstract Expressionism, Pop, …) hang original **Studio pieces**
   instead: SVGs drawn with code in the movement's techniques (`src/lib/studio-art/`), never

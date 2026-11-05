@@ -32,15 +32,22 @@ No API keys are needed. The `mock` provider works offline.
 
 ## Hang a public-domain work
 
-1. Find the object on the [Art Institute of Chicago](https://www.artic.edu/collection?is_public_domain=1)
-   or [Cleveland Museum of Art](https://www.clevelandart.org/art/collection/search?only-open-access=1)
-   website. The number in its URL is its id.
-2. Add `pd("aic", <id>)` or `pd("cma", <id>)` to an exhibition's `artworks` in
-   `src/content/exhibitions.ts`.
+1. Find the object in one of these open-access collections. The number in its URL is its id.
+
+   | Source | Search                                                                                           | Id                                                                 |
+   | ------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+   | `aic`  | [Art Institute of Chicago](https://www.artic.edu/collection?is_public_domain=1)                  | `artic.edu/artworks/27992` → `pd("aic", 27992)`                    |
+   | `cma`  | [Cleveland Museum of Art](https://www.clevelandart.org/art/collection/search?only-open-access=1) | the number in its URL                                              |
+   | `met`  | [The Met](https://www.metmuseum.org/art/collection/search?showOnly=openAccess)                   | `metmuseum.org/art/collection/search/436535` → `pd("met", 436535)` |
+   | `nga`  | [National Gallery of Art](https://www.nga.gov/artwork-search)                                    | `nga.gov/artworks/106382-self-portrait` → `pd("nga", 106382)`      |
+
+2. Add the call to an exhibition's `artworks` in `src/content/exhibitions.ts`.
 3. Run `pnpm art:fetch`. It downloads the image to `public/art/` and a large copy (up to
    3000 px) to `public/art/zoom/` for looking closely, records the title, artist, date, medium
    and credit line, and refuses the work unless it is public domain and the artist died more
-   than 70 years ago.
+   than 70 years ago. The first run with an `nga` work downloads NGA's open-data CSVs
+   (about 215 MB) into `node_modules/.cache/`; later runs reuse them for a week. Images of
+   works you took off the walls are deleted.
 4. Commit both images and `collection.generated.ts` with your change.
 
 ## Draw a Studio piece with code
