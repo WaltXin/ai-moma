@@ -508,6 +508,22 @@ export function createMuseumScene(
   let wideOpen = true;
   const artGroups = levels.map((g) => g.children.find((c) => c.userData.art));
   const near = new Set<number>();
+  // The baked light, worked out in a worker once we know which floor the visitor is on.
+  let baker: Worker | null = null;
+  let baking = false;
+  const bake = (from: number) => {
+    baking = true;
+    const order = b.levels.map((l) => l.index).sort((p, q) => Math.abs(p - from) - Math.abs(q - from) || q - p);
+    try {
+      baker = new Worker(new URL("./bake.worker.ts", import.meta.url), { type: "module" });
+    } catch {
+      return;
+    }
+    baker.onmessage = (e) => arch.light.apply(e.data);
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __light: arch.light });
+    baker.onerror = (e) => console.warn("Couldn't bake the light", e.message);
+    baker.postMessage({ building: b, low, order });
+  };
   const view = { width: 1, height: 1 };
   const corner = new THREE.Vector3();
 
@@ -534,6 +550,8 @@ export function createMuseumScene(
 
     render(s) {
       const level = b.levels[s.at.level];
+      if (!baking) bake(s.at.level);
+      arch.light.tick(s.dt);
       // Through the visitor's eyes, or pulled back behind them, never through a wall.
       const f = forward(s.yaw);
       const back = { x: -f.x * Math.cos(s.pitch), y: -Math.sin(s.pitch), z: -f.z * Math.cos(s.pitch) };
@@ -690,6 +708,7 @@ export function createMuseumScene(
     obstacles: (lv) => crowd.obstacles(lv),
 
     dispose() {
+      baker?.terminate();
       for (const t of trash) t.dispose();
       for (const m of materials.values()) m.dispose();
       renderer.dispose();

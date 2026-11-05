@@ -1,18 +1,17 @@
 import * as THREE from "three";
-import { floorWall } from "@/components/gallery/walls";
 import {
   type Building,
   type Level,
   type Opening,
-  type Rect,
   SLAB,
   type Stair,
   type Vec,
   type Wall,
   inRect,
-  spaceAt,
 } from "@/lib/walk/building";
+import { BAKE_HIGH, BAKE_LOW, type BakedLevel, type Face, LAYLIGHT_INSET, type LightLayout, ceilingLights, faceFor, faceUv, lightLayout, subtractRect } from "@/lib/walk/light";
 import { Batch, type Kit, Quads, boxGeometry, placed } from "./kit";
+import { WHITE, paintAt } from "./paint";
 import { floorShade } from "./textures";
 
 /**
@@ -21,24 +20,27 @@ import { floorShade } from "./textures";
  * the stairs, the glass lift, the façade outside and the oculus on top.
  */
 
-export const WHITE = "#f3f1ec";
-/** Gallery walls take the floor's colour; everything else is a warm white. */
-export function paintAt(level: Level, p: Vec): string | null {
-  const space = spaceAt(level, p);
-  if (!space) return null;
-  if (space.kind === "gallery") return floorWall(level.slug).wall;
-  if (space.kind === "studio") return "#e6e5e1";
-  if (space.kind === "outside") return null;
-  return WHITE;
-}
+export { WHITE, paintAt } from "./paint";
 
 export type LiftRig = {
   /** Moves the car to height `y`; opens the doors on floor `at` by `open` (0–1). */
   update(y: number, at: number | null, open: number): void;
 };
 
+/** The baked light (`lib/walk/light.ts`): where each floor's goes, and how it arrives. */
+export type BakedLight = {
+  layouts: LightLayout[];
+  /** Hands a floor its bake; it fades in over a second or so. */
+  apply(baked: BakedLevel): void;
+  tick(dt: number): void;
+  /** For scripts while developing: which floors have their bake, and a way to compare with and without. */
+  baked(): number[];
+  force(mix: number | null): void;
+};
+
 export type Architecture = {
   lift: LiftRig;
+  light: BakedLight;
   /** The front doors: slide open as someone comes near. */
   entrance: (open: number) => void;
   /** Light in the atrium, for its slow drift. */
@@ -51,6 +53,9 @@ const shadeAt = (y: number, h: number) =>
     ? SHADE.floor + ((SHADE.eye - SHADE.floor) * y) / 1.8
     : SHADE.eye + ((SHADE.top - SHADE.eye) * (y - 1.8)) / Math.max(0.1, h - 1.8);
 
+/** Where a wall face's light is baked: its rectangle in the floor's atlas. */
+type FaceLight = { layout: LightLayout; face: Face; base: number };
+
 /** An upright quad on a wall face with normal `n`, along s0→s1 of the face line. */
 function upright(
   q: Quads,
@@ -62,19 +67,30 @@ function upright(
   y1: number,
   c0 = 1,
   c1 = 1,
+  lm?: FaceLight,
 ) {
+  // Lightmap coordinates for the quad's ends a and b, bottom and top.
+  const at = (a: number, b: number): [number, number, number, number] | undefined => {
+    if (!lm) return undefined;
+    const [ua, v0] = faceUv(lm.layout, lm.face, a, y0 - lm.base);
+    const [ub, v1] = faceUv(lm.layout, lm.face, b, y1 - lm.base);
+    return [ua, ub, v0, v1];
+  };
   if (n.x === 0) {
-    if (n.z > 0) q.wall(s0, line, s1, line, y0, y1, c0, c1, s0);
-    else q.wall(s1, line, s0, line, y0, y1, c0, c1, -s1);
-  } else if (n.x > 0) q.wall(line, s1, line, s0, y0, y1, c0, c1, -s1);
-  else q.wall(line, s0, line, s1, y0, y1, c0, c1, s0);
+    if (n.z > 0) q.wall(s0, line, s1, line, y0, y1, c0, c1, s0, at(s0, s1));
+    else q.wall(s1, line, s0, line, y0, y1, c0, c1, -s1, at(s1, s0));
+  } else if (n.x > 0) q.wall(line, s1, line, s0, y0, y1, c0, c1, -s1, at(s1, s0));
+  else q.wall(line, s0, line, s1, y0, y1, c0, c1, s0, at(s0, s1));
 }
 
-/** A wall face shaded darker near the floor and ceiling, split at eye height for a smooth ramp. */
-function shadedUpright(q: Quads, n: Vec, line: number, s0: number, s1: number, base: number, y0: number, y1: number, h: number) {
+/**
+ * A wall face shaded darker near the floor and ceiling, split at eye height
+ * for a smooth ramp: how it looks until its baked light arrives.
+ */
+function shadedUpright(q: Quads, n: Vec, line: number, s0: number, s1: number, base: number, y0: number, y1: number, h: number, lm?: FaceLight) {
   const cuts = [y0, ...[1.8].filter((c) => c > y0 && c < y1), y1];
   for (let i = 0; i + 1 < cuts.length; i++) {
-    upright(q, n, line, s0, s1, base + cuts[i], base + cuts[i + 1], shadeAt(cuts[i], h), shadeAt(cuts[i + 1], h));
+    upright(q, n, line, s0, s1, base + cuts[i], base + cuts[i + 1], shadeAt(cuts[i], h), shadeAt(cuts[i + 1], h), lm);
   }
 }
 
@@ -82,15 +98,21 @@ const horizontal = (w: Wall) => w.z0 === w.z1;
 
 export function buildArchitecture(k: Kit, b: Building): Architecture {
   const shared = new Batch(k.mat, k.keep);
+  const quality = k.low ? BAKE_LOW : BAKE_HIGH;
+  const layouts = b.levels.map((l) => lightLayout(l, quality));
+  const lit = b.levels.map(() => litMaterials(k));
 
   for (const level of b.levels) {
     const batch = new Batch(k.mat, k.keep);
+    const baked = new Batch(lit[level.index].mat, k.keep, true);
     const group = k.levels[level.index];
-    buildWalls(k, b, level, batch, shared);
-    buildFloors(k, b, level, group);
-    buildCeiling(k, b, level, batch);
+    const layout = layouts[level.index];
+    buildWalls(k, b, level, batch, shared, baked, layout);
+    buildFloors(k, b, level, group, layout, lit[level.index]);
+    buildCeiling(k, b, level, baked, batch, layout);
     buildEdges(b, level, batch);
     batch.flush(group);
+    baked.flush(group);
   }
   for (const s of b.stairs) buildStair(k, b, s, shared);
   buildRoof(k, b, shared);
@@ -98,12 +120,142 @@ export function buildArchitecture(k: Kit, b: Building): Architecture {
   const beam = buildOculusLight(k, b);
   shared.flush(k.shared);
   const lift = buildLift(k, b);
-  return { lift, entrance, beam };
+  return { lift, entrance, beam, light: bakedLight(k, layouts, lit) };
+}
+
+// ── Baked light ──────────────────────────────────────────────────────────
+
+/**
+ * One floor's lit surfaces: its own copies of the plaster, skirting, ceiling
+ * and floor materials, so its bake can be handed to them alone.
+ */
+type LitMaterials = {
+  mat: (key: string) => THREE.Material;
+  /** Lit by the wall atlas, the floor plan and the ceiling plan. */
+  walls: THREE.MeshStandardMaterial[];
+  floors: THREE.MeshStandardMaterial[];
+  ceilings: THREE.MeshStandardMaterial[];
+  /** 0 = the old shading, 1 = all baked. */
+  mix: { value: number };
+  fading: boolean;
+};
+
+function litMaterials(k: Kit): LitMaterials {
+  const cache = new Map<string, THREE.Material>();
+  const lit: LitMaterials = {
+    walls: [],
+    floors: [],
+    ceilings: [],
+    mix: { value: 0 },
+    fading: false,
+    mat(key) {
+      let m = cache.get(key);
+      if (!m) {
+        const copy = k.keep((k.mat(key) as THREE.MeshStandardMaterial).clone());
+        takesBake(copy, lit.mix);
+        (key === "ceiling" ? lit.ceilings : lit.walls).push(copy);
+        cache.set(key, (m = copy));
+      }
+      return m;
+    },
+  };
+  return lit;
+}
+
+/**
+ * Teaches a material to take its light from the bake in its `lightMap` slot:
+ * instead of adding light, the map scales the surface's colour (and glow),
+ * eased in from the vertex shading by `mix`.
+ */
+export function takesBake(m: THREE.MeshStandardMaterial, mix: { value: number }) {
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.bakeMix = mix;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float bakeMix;")
+      .replace(
+        "#include <color_fragment>",
+        `#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+  vec3 rampShade = vColor.rgb;
+#else
+  vec3 rampShade = vec3( 1.0 );
+#endif
+#ifdef USE_LIGHTMAP
+  vec3 bakeShade = mix( rampShade, texture2D( lightMap, vLightMapUv ).rgb * lightMapIntensity, bakeMix );
+#else
+  vec3 bakeShade = rampShade;
+#endif
+diffuseColor.rgb *= bakeShade;`,
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+#ifdef USE_LIGHTMAP
+  totalEmissiveRadiance *= mix( vec3( 1.0 ), bakeShade, bakeMix );
+#endif`,
+      )
+      .replace("#include <lights_fragment_maps>", THREE.ShaderChunk.lights_fragment_maps.replace("irradiance += lightMapIrradiance;", ""))
+      // A floor reflects the room, so where the room is dim its reflections are too.
+      .replace(
+        "#include <aomap_fragment>",
+        `#include <aomap_fragment>
+#ifdef USE_LIGHTMAP
+  reflectedLight.indirectSpecular *= mix( vec3( 1.0 ), clamp( bakeShade, 0.0, 1.0 ), bakeMix );
+#endif`,
+      );
+  };
+  m.customProgramCacheKey = () => "baked-light";
+}
+
+function bakedLight(k: Kit, layouts: LightLayout[], lit: LitMaterials[]): BakedLight {
+  const texture = (data: Uint8Array, w: number, h: number) => {
+    const t = k.keep(new THREE.DataTexture(data, w, h, THREE.RGBAFormat));
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearFilter;
+    t.channel = 1;
+    t.needsUpdate = true;
+    return t;
+  };
+  const give = (ms: THREE.MeshStandardMaterial[], t: THREE.Texture) => {
+    for (const m of ms) {
+      m.lightMap = t;
+      // The bake is stored halved, so it can brighten as well as darken.
+      m.lightMapIntensity = 2;
+      m.needsUpdate = true;
+    }
+  };
+  let forced: number | null = null;
+  return {
+    layouts,
+    apply(baked) {
+      const layout = layouts[baked.level];
+      const l = lit[baked.level];
+      if (!layout || !l) return;
+      give(l.walls, texture(baked.atlas, layout.atlas.width, layout.atlas.height));
+      give(l.floors, texture(baked.floor, layout.plan.cols, layout.plan.rows));
+      give(l.ceilings, texture(baked.ceiling, layout.plan.cols, layout.plan.rows));
+      l.fading = true;
+    },
+    baked: () => lit.flatMap((l, i) => (l.walls[0]?.lightMap ? [i] : [])),
+    force(mix) {
+      forced = mix;
+      for (const l of lit) if (l.walls[0]?.lightMap) l.mix.value = mix ?? 1;
+    },
+    tick(dt) {
+      for (const l of lit) {
+        if (!l.fading || forced !== null) continue;
+        l.mix.value = Math.min(1, l.mix.value + dt / 1.4);
+        // The bake already darkens the floor by the walls; the contact shadows keep to the furniture.
+        for (const m of l.floors) m.aoMapIntensity = 1 - 0.2 * l.mix.value;
+        if (l.mix.value >= 1) l.fading = false;
+      }
+    },
+  };
 }
 
 // ── Walls ────────────────────────────────────────────────────────────────
 
-function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Batch) {
+function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Batch, baked: Batch, layout: LightLayout) {
   const plaster = new Map<string, Quads>();
   const q = (paint: string) => {
     let quads = plaster.get(paint);
@@ -122,7 +274,7 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
   const top = b.levels.length - 1;
   const bandTop = level.index < top ? b.levels[level.index + 1].y : b.roofY + 1.2;
 
-  for (const w of level.walls) {
+  for (const [wi, w] of level.walls.entries()) {
     const H = w.top ?? level.ceiling;
     const t = w.thick;
     const along = horizontal(w) ? "x" : "z";
@@ -139,6 +291,8 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
         const line = centre + (side * t) / 2;
         // The outside of an outer wall wears the façade instead.
         if (w.outside && w.outside.x === n.x && w.outside.z === n.z) continue;
+        const face = faceFor(layout, wi, side as 1 | -1);
+        const lm = face && { layout, face, base: y };
         // Paint follows the room each stretch of wall faces.
         const STEP = 0.25;
         const breaks = new Set<number>([start, end]);
@@ -172,12 +326,12 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
             : [[0, H]];
           for (const [p0, p1] of pieces) {
             if (p1 - p0 < 1e-3) continue;
-            shadedUpright(q(paint), n, line, s0, s1, y, p0, p1, H);
+            shadedUpright(q(paint), n, line, s0, s1, y, p0, p1, H, lm);
           }
           if (!hole || hole.bottom > 0.05) {
             // A skirting board, standing just proud of the wall.
             const sk = skirt(paint);
-            upright(sk, n, line + (n.x + n.z) * 0.012, s0, s1, y + (hole ? 0 : 0), y + 0.1, 0.9, 1);
+            upright(sk, n, line + (n.x + n.z) * 0.012, s0, s1, y, y + 0.1, 0.9, 1, lm);
           }
         }
       }
@@ -244,8 +398,8 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
       }
     }
   }
-  for (const [paint, quads] of plaster) batch.push(`plaster:${paint}`, quads.build());
-  for (const [paint, quads] of skirting) batch.push(`skirting:${paint}`, quads.build());
+  for (const [paint, quads] of plaster) baked.push(`plaster:${paint}`, quads.build());
+  for (const [paint, quads] of skirting) baked.push(`skirting:${paint}`, quads.build());
   if (!reveals.empty) batch.push(`plaster:${WHITE}`, reveals.build());
   if (!skin.empty) shared.push("facade", skin.build());
 }
@@ -339,19 +493,10 @@ function buildGlassWall(k: Kit, level: Level, w: Wall, batch: Batch) {
 
 const SURFACE_SCALE = { wood: 2, stone: 4, deck: 2, street: 4 } as const;
 
-function buildFloors(k: Kit, b: Building, level: Level, group: THREE.Group) {
-  // A soft shadow round every wall and piece of furniture, baked into a lightmap.
-  let x0 = Infinity;
-  let z0 = Infinity;
-  let x1 = -Infinity;
-  let z1 = -Infinity;
-  for (const f of level.floors) {
-    x0 = Math.min(x0, f.rect.x0);
-    z0 = Math.min(z0, f.rect.z0);
-    x1 = Math.max(x1, f.rect.x1);
-    z1 = Math.max(z1, f.rect.z1);
-  }
-  const map = { x0, z0, w: x1 - x0, h: z1 - z0 };
+function buildFloors(k: Kit, b: Building, level: Level, group: THREE.Group, layout: LightLayout, lit: LitMaterials) {
+  // A soft shadow round every wall and piece of furniture, in the same plan as the baked light.
+  const map = layout.plan;
+  const { x0, z0 } = map;
   const solids = [
     // Walls, with gaps at their doorways.
     ...level.walls.flatMap((w) => {
@@ -403,6 +548,11 @@ function buildFloors(k: Kit, b: Building, level: Level, group: THREE.Group) {
     const m = k.keep(base.clone());
     m.aoMap = shade;
     m.aoMapIntensity = 1;
+    // Outside, the sky does the lighting; indoors, the bake.
+    if (surface !== "street" && surface !== "deck") {
+      takesBake(m, lit.mix);
+      lit.floors.push(m);
+    }
     const mesh = new THREE.Mesh(k.keep(q.build()), m);
     mesh.userData.floor = level.index;
     group.add(mesh);
@@ -414,17 +564,13 @@ function buildFloors(k: Kit, b: Building, level: Level, group: THREE.Group) {
 
 // ── Ceilings ─────────────────────────────────────────────────────────────
 
-function buildCeiling(k: Kit, b: Building, level: Level, batch: Batch) {
+function buildCeiling(k: Kit, b: Building, level: Level, baked: Batch, batch: Batch, layout: LightLayout) {
   const y = level.y + level.ceiling;
-  const top = b.levels.length - 1;
-  const above: Rect[] =
-    level.index < top
-      ? b.levels[level.index + 1].floors.map((f) => f.rect)
-      : subtractAtrium(b.footprints[top], b.atrium);
-  const q = new Quads();
-  for (const r of above) q.level(r.x0, r.z0, r.x1, r.z1, y, true);
-  if (!q.empty) batch.push("ceiling", q.build());
-  const covered = (p: Vec) => above.some((r) => inRect(r, p));
+  // The same lights the bake shines (`lib/walk/light.ts`).
+  const lights = ceilingLights(b, level);
+  const q = new Quads(layout.plan);
+  for (const r of lights.covered) q.level(r.x0, r.z0, r.x1, r.z1, y, true);
+  if (!q.empty) baked.push("ceiling", q.build());
 
   // Laylights over the galleries; downlights everywhere else.
   const down = new THREE.CircleGeometry(0.09, 20);
@@ -435,7 +581,7 @@ function buildCeiling(k: Kit, b: Building, level: Level, batch: Batch) {
     if (space.kind === "outside" || space.kind === "terrace") continue;
     if (space.kind === "gallery" || space.kind === "lab") {
       const room = space.room !== undefined ? b.rooms[space.room].rect : r;
-      const inset = 1.9;
+      const inset = LAYLIGHT_INSET;
       const lx0 = room.x0 + inset;
       const lz0 = room.z0 + inset;
       const lx1 = room.x1 - inset;
@@ -462,31 +608,15 @@ function buildCeiling(k: Kit, b: Building, level: Level, batch: Batch) {
       }
       continue;
     }
-    // Downlights on a 3 m grid, where there's ceiling overhead.
-    const spacing = space.kind === "lobby" ? 3.6 : 3;
-    for (let x = r.x0 + spacing / 2; x < r.x1; x += spacing) {
-      for (let z = r.z0 + spacing / 2; z < r.z1; z += spacing) {
-        const p = { x, z };
-        if (!covered(p)) continue;
-        const inner = spaceAt(level, p);
-        if (inner !== space) continue;
-        batch.add("lamp", down, x, y - 0.005, z);
-        batch.add("black", can, x, y + 0.04, z);
-      }
-    }
+  }
+  // Downlights on a 3 m grid, where there's ceiling overhead.
+  for (const p of lights.downs) {
+    batch.add("lamp", down, p.x, y - 0.005, p.z);
+    batch.add("black", can, p.x, y + 0.04, p.z);
   }
   down.dispose();
   can.dispose();
   void k;
-}
-
-function subtractAtrium(r: Rect, a: Rect): Rect[] {
-  return [
-    { x0: r.x0, z0: r.z0, x1: r.x1, z1: a.z0 },
-    { x0: r.x0, z0: a.z1, x1: r.x1, z1: r.z1 },
-    { x0: r.x0, z0: a.z0, x1: a.x0, z1: a.z1 },
-    { x0: a.x1, z0: a.z0, x1: r.x1, z1: a.z1 },
-  ].filter((p) => p.x1 > p.x0 && p.z1 > p.z0);
 }
 
 // ── Edges: slab edges and glass balustrades ──────────────────────────────
@@ -627,7 +757,7 @@ function buildRoof(k: Kit, b: Building, batch: Batch) {
   const top = b.levels.length - 1;
   const fp = b.footprints[top];
   const roof = new Quads();
-  for (const r of subtractAtrium(fp, b.atrium)) roof.level(r.x0, r.z0, r.x1, r.z1, b.roofY);
+  for (const r of subtractRect(fp, b.atrium)) roof.level(r.x0, r.z0, r.x1, r.z1, b.roofY);
   batch.push("roof", roof.build());
 
   // The atrium's ceiling: a flat white plane round a great round skylight.

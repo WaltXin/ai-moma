@@ -105,7 +105,7 @@ src/
     museum/               Domain types, registry, content validation
     generation/           Provider interface, registry, adapters
     submissions/          Exhibition-request schema + store
-    walk/                 The building's plan, stairs, routes, first-person movement
+    walk/                 The building's plan, stairs, routes, first-person movement, baked light
   components/             Shared UI (artwork frame, placeholders)
     walk/                 three.js building, city, visitors; walk loop; overlays
 public/art/               Downloaded public-domain images (zoom/: large copies for looking closely)
