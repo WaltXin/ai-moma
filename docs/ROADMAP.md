@@ -52,7 +52,11 @@ Rough order. Each item is a good first PR area.
 - [x] At least 4 works per room: code-drawn Studio pieces where works are still in copyright
 - [ ] Replace code-drawn Studio pieces with benchmarked AI generations
 - [ ] Public-domain images for Suprematism & Constructivism and Futurism (few in our sources yet)
-- [ ] More movements: Fluxus, Conceptual Art, Land Art, …
+- [ ] More movements: Fluxus, Conceptual Art, Land Art, … See
+      [MOMA_CATALOG.md](MOMA_CATALOG.md) for every movement, form and technique MoMA collects,
+      with what's still open
+- [ ] More forms beyond painting: photography, books, sculpture and design, video, sound,
+      performance, software (see [MOMA_CATALOG.md](MOMA_CATALOG.md#good-first-picks))
 - [ ] MDX learn pages with images (public domain or licensed only)
 - [ ] Guided tours and audio guides
 - [ ] i18n
