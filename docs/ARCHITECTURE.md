@@ -44,7 +44,16 @@ floor content ──▶ buildFloorPlan()          src/lib/walk/floor-plan.ts   (
 - Controls: drag to look; WASD / arrows (left/right turn); click the floor to walk there; click
   a painting to walk up to it; E opens what you're facing; scroll, pinch or V steps the camera
   back to show your avatar. Phones get a thumb stick. Without WebGL the page links to the guide.
-- In development, `window.__walk` holds the walk state, so scripts can move the visitor.
+- A visit starts in the lift. "Enter" (the click browsers need before playing sound) starts the
+  audio; the doors open and the visitor steps out. Taking the lift fades to black and arrives on
+  the next floor the same way, without the welcome. Any key or tap skips the walk out.
+- Sound (`components/walk/audio.ts`, Web Audio, no audio files): a generative score in each
+  floor's mood (`lib/walk/music.ts`: scale, chords, tempo, density), a low building hum,
+  footsteps on oak or terrazzo (`surfaceAt()`), and the lift's chime and doors, panned to where
+  they are, all in one reverb. One engine lives for the visit, so floors crossfade. M or the
+  Sound button mutes it (remembered in `localStorage`); a painting up close muffles the music.
+- In development, `window.__walk` holds the walk state and `window.__audio()` the audio engine,
+  so scripts can move the visitor and check the sound.
 
 - One room per exhibition, left to right in the floor's walking order, with paintings on the
   room's back wall. Adding an exhibition to `floors.ts` adds a room; nobody draws maps by hand.

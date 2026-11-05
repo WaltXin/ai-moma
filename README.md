@@ -33,7 +33,7 @@ move, so its gallery will respond to your mouse, touch or phone tilt. The platfo
 | Area                                                 | State                                                                                |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Lobby, floors, exhibitions, learn pages              | ✅ Working, content lives in `src/content/`                                          |
-| Walkable floors (3D, first person, single player)    | ✅ `/floors/<floor>/walk`, with an elevator between floors                           |
+| Walkable floors (3D, first person, single player)    | ✅ `/floors/<floor>/walk`, with an elevator between floors and live-composed music   |
 | 17 movements, Impressionism → Op Art, on 7 floors    | ✅ 47 public-domain works + 35 code-drawn Studio pieces; every room hangs at least 4 |
 | Studio → generate → request exhibition               | ✅ Working end to end with the offline **mock** provider                             |
 | Real image models (OpenAI, Google, FLUX, Qwen-Image) | 🔌 Adapter stubs; pick and implement next                                            |

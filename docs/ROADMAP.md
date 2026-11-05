@@ -37,6 +37,7 @@ Rough order. Each item is a good first PR area.
 - [x] Lounge at the end of every floor, so small floors don't look empty
 - [ ] Minimap and "you are here" on walkable floors
 - [x] 3D galleries: walk a floor in first person (or step back to see yourself), lit paintings on the walls, lift doors that open
+- [x] Sound: generative music in each floor's mood, footsteps, the lift's chime; arrive by lift
 - [ ] 3D model artworks (`model3d` source)
 
 ## 4. More of the museum
