@@ -108,7 +108,7 @@ src/
     walk/                 The building's plan, stairs, routes, first-person movement
   components/             Shared UI (artwork frame, placeholders)
     walk/                 three.js building, city, visitors; walk loop; overlays
-public/art/               Downloaded public-domain images
+public/art/               Downloaded public-domain images (zoom/: large copies for looking closely)
 scripts/                  `fetch-public-domain-art.mjs`
 tests/                    Vitest unit tests
 docs/                     Architecture and roadmap

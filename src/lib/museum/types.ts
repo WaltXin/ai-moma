@@ -77,7 +77,8 @@ export type ImageFile = { src: string; width: number; height: number };
 
 export type ArtworkSource =
   | { kind: "placeholder" }
-  | ({ kind: "image" } & ImageFile)
+  /** `zoom` is a large copy for looking closely (`pnpm art:fetch` saves one for public-domain works). */
+  | ({ kind: "image" } & ImageFile & { zoom?: ImageFile })
   /** Two or more frames that change with viewing angle (an Agamograph). */
   | { kind: "lenticular"; frames: ImageFile[] }
   | { kind: "model3d"; src: string };

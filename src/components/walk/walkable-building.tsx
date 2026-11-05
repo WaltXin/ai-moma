@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Arrow } from "@/components/gallery/wall-parts";
 import { type Wall, floorWall } from "@/components/gallery/walls";
+import type { ScreenRect } from "@/components/zoom-image";
 import { type Building, spaceAt } from "@/lib/walk/building";
 import {
   EYE,
@@ -105,6 +106,10 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
   const [mode, setMode] = useState<Mode>("loading");
   const [focus, setFocus] = useState<Focus | null>(null);
   const [overlay, setOverlay] = useState<Focus | { kind: "directory" } | null>(null);
+  /** Where the painting being opened hangs on screen, so it can grow from there. */
+  const [artFrom, setArtFrom] = useState<ScreenRect | null>(null);
+  /** The art viewer's own close, which shrinks the picture back onto the wall. */
+  const exitArt = useRef<(() => void) | null>(null);
   const [place, setPlace] = useState({ level: start.kind === "lift" ? start.level : 0, name: "" });
   const [hint, setHint] = useState(true);
   const [help, setHelp] = useState(false);
@@ -182,9 +187,18 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
     };
   }
 
+  /** Where a painting is on screen now, in viewport pixels. */
+  const rectOf = useCallback((id: string): ScreenRect | null => {
+    const r = sceneRef.current?.artRect(id);
+    const c = canvasRef.current?.getBoundingClientRect();
+    if (!r || !c) return null;
+    return { left: c.left + r.left, top: c.top + r.top, width: r.width, height: r.height };
+  }, []);
+
   const open = useCallback((f: Focus | { kind: "directory" } | null) => {
     if (!f) return;
     const g = game.current!;
+    if (f.kind === "art" && g.overlay?.kind !== "art") setArtFrom(rectOf(f.art.id));
     g.keys.clear();
     g.stick = { x: 0, y: 0 };
     g.legs = [];
@@ -192,7 +206,7 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
     g.pending = null;
     g.overlay = f;
     setOverlay(f);
-  }, []);
+  }, [rectOf]);
 
   const close = useCallback(() => {
     game.current!.overlay = null;
@@ -641,7 +655,7 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
     };
     const onDown = (e: KeyboardEvent) => {
       if (g.overlay) {
-        if (e.key === "Escape") return close();
+        if (e.key === "Escape") return exitArt.current ? exitArt.current() : close();
         // Let sliders and buttons inside the overlay keep their own arrow keys.
         const inControl = e.target instanceof HTMLInputElement;
         if (!inControl && g.overlay.kind === "art" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
@@ -1043,6 +1057,9 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
           art={overlay.art}
           room={b.rooms[overlay.art.room]}
           siblings={roomArt(overlay.art.room)}
+          from={artFrom}
+          rectOf={rectOf}
+          exitRef={exitArt}
           onNavigate={(art) => open({ kind: "art", art })}
           onClose={close}
         />

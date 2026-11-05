@@ -39,6 +39,8 @@ Rough order. Each item is a good first PR area.
 - [x] 3D galleries: walk a floor in first person (or step back to see yourself), lit paintings on the walls, lift doors that open
 - [x] Sound: generative music in each floor's mood, footsteps, the lift's chime; arrive by lift
 - [x] One real building: enter from the street, lobby with grand stair, a skylit atrium with stairs across it and a glass lift, enfiladed galleries, a sculpture terrace with a living wall, other visitors
+- [x] Up close: a painting grows off the wall into a full-screen viewer you can zoom into, brushstroke by brushstroke
+- [ ] Guided looking: an expert's tour through one painting, zooming to each detail as they explain it
 - [ ] Day and night: follow the clock past opening hours (the building keeps daylight hours for now)
 - [ ] Better performance on low-end phones (merge visitors, lower-detail far floors)
 - [ ] 3D model artworks (`model3d` source)

@@ -14,6 +14,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-100476.jpg",
       width: 843,
       height: 590,
+      zoom: {
+        src: "/art/zoom/aic-100476.jpg",
+        width: 3000,
+        height: 2102,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -53,6 +58,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-109819.jpg",
       width: 843,
       height: 843,
+      zoom: {
+        src: "/art/zoom/aic-109819.jpg",
+        width: 3000,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -72,6 +82,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-111436.jpg",
       width: 843,
       height: 673,
+      zoom: {
+        src: "/art/zoom/aic-111436.jpg",
+        width: 3000,
+        height: 2396,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -91,6 +106,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-111442.jpg",
       width: 843,
       height: 1279,
+      zoom: {
+        src: "/art/zoom/aic-111442.jpg",
+        width: 1977,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -110,6 +130,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-11723.jpg",
       width: 843,
       height: 631,
+      zoom: {
+        src: "/art/zoom/aic-11723.jpg",
+        width: 3000,
+        height: 2246,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -129,6 +154,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-122130.jpg",
       width: 843,
       height: 551,
+      zoom: {
+        src: "/art/zoom/aic-122130.jpg",
+        width: 3000,
+        height: 1960,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -148,6 +178,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-144467.jpg",
       width: 843,
       height: 669,
+      zoom: {
+        src: "/art/zoom/aic-144467.jpg",
+        width: 3000,
+        height: 2383,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -167,6 +202,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-14572.jpg",
       width: 843,
       height: 765,
+      zoom: {
+        src: "/art/zoom/aic-14572.jpg",
+        width: 3000,
+        height: 2724,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -186,6 +226,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-14655.jpg",
       width: 843,
       height: 1046,
+      zoom: {
+        src: "/art/zoom/aic-14655.jpg",
+        width: 2418,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -205,6 +250,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-154235.jpg",
       width: 843,
       height: 1246,
+      zoom: {
+        src: "/art/zoom/aic-154235.jpg",
+        width: 2029,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -224,6 +274,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-16487.jpg",
       width: 843,
       height: 676,
+      zoom: {
+        src: "/art/zoom/aic-16487.jpg",
+        width: 3000,
+        height: 2404,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -243,6 +298,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-16568.jpg",
       width: 843,
       height: 809,
+      zoom: {
+        src: "/art/zoom/aic-16568.jpg",
+        width: 3000,
+        height: 2881,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -262,6 +322,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-17229.jpg",
       width: 843,
       height: 1151,
+      zoom: {
+        src: "/art/zoom/aic-17229.jpg",
+        width: 2197,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -281,6 +346,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-19339.jpg",
       width: 843,
       height: 667,
+      zoom: {
+        src: "/art/zoom/aic-19339.jpg",
+        width: 3000,
+        height: 2372,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -300,6 +370,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-20199.jpg",
       width: 843,
       height: 526,
+      zoom: {
+        src: "/art/zoom/aic-20199.jpg",
+        width: 3000,
+        height: 1873,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -319,6 +394,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-20684.jpg",
       width: 843,
       height: 655,
+      zoom: {
+        src: "/art/zoom/aic-20684.jpg",
+        width: 3000,
+        height: 2329,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -338,6 +418,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-27943.jpg",
       width: 843,
       height: 629,
+      zoom: {
+        src: "/art/zoom/aic-27943.jpg",
+        width: 3000,
+        height: 2238,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -357,6 +442,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-27992.jpg",
       width: 843,
       height: 565,
+      zoom: {
+        src: "/art/zoom/aic-27992.jpg",
+        width: 3000,
+        height: 2009,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -376,6 +466,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-28560.jpg",
       width: 843,
       height: 660,
+      zoom: {
+        src: "/art/zoom/aic-28560.jpg",
+        width: 3000,
+        height: 2348,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -395,6 +490,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-61128.jpg",
       width: 843,
       height: 736,
+      zoom: {
+        src: "/art/zoom/aic-61128.jpg",
+        width: 3000,
+        height: 2622,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -414,6 +514,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-64001.jpg",
       width: 843,
       height: 1128,
+      zoom: {
+        src: "/art/zoom/aic-64001.jpg",
+        width: 2242,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -433,6 +538,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-64818.jpg",
       width: 843,
       height: 498,
+      zoom: {
+        src: "/art/zoom/aic-64818.jpg",
+        width: 3000,
+        height: 1773,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -452,6 +562,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-65821.jpg",
       width: 843,
       height: 869,
+      zoom: {
+        src: "/art/zoom/aic-65821.jpg",
+        width: 2182,
+        height: 2250,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -471,6 +586,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-80607.jpg",
       width: 843,
       height: 1074,
+      zoom: {
+        src: "/art/zoom/aic-80607.jpg",
+        width: 2354,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -490,6 +610,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-81551.jpg",
       width: 843,
       height: 687,
+      zoom: {
+        src: "/art/zoom/aic-81551.jpg",
+        width: 3000,
+        height: 2446,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -509,6 +634,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-87045.jpg",
       width: 843,
       height: 1048,
+      zoom: {
+        src: "/art/zoom/aic-87045.jpg",
+        width: 2413,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -528,6 +658,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/aic-8991.jpg",
       width: 843,
       height: 847,
+      zoom: {
+        src: "/art/zoom/aic-8991.jpg",
+        width: 2987,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Art Institute of Chicago",
@@ -566,6 +701,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-130625.jpg",
       width: 666,
       height: 893,
+      zoom: {
+        src: "/art/zoom/cma-130625.jpg",
+        width: 2236,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -585,6 +725,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-136592.jpg",
       width: 557,
       height: 893,
+      zoom: {
+        src: "/art/zoom/cma-136592.jpg",
+        width: 1871,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -604,6 +749,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-136595.jpg",
       width: 750,
       height: 621,
+      zoom: {
+        src: "/art/zoom/cma-136595.jpg",
+        width: 3000,
+        height: 2488,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -623,6 +773,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-138684.jpg",
       width: 671,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-138684.jpg",
+        width: 2237,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -642,6 +797,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-142692.jpg",
       width: 741,
       height: 893,
+      zoom: {
+        src: "/art/zoom/cma-142692.jpg",
+        width: 2489,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -661,6 +821,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-142792.jpg",
       width: 750,
       height: 640,
+      zoom: {
+        src: "/art/zoom/cma-142792.jpg",
+        width: 3000,
+        height: 2561,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -680,6 +845,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-143278.jpg",
       width: 887,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-143278.jpg",
+        width: 2958,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -699,6 +869,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-144595.jpg",
       width: 635,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-144595.jpg",
+        width: 2118,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -718,6 +893,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-144597.jpg",
       width: 635,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-144597.jpg",
+        width: 2115,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -737,6 +917,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-144705.jpg",
       width: 818,
       height: 893,
+      zoom: {
+        src: "/art/zoom/cma-144705.jpg",
+        width: 1536,
+        height: 1676,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -756,6 +941,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-146135.jpg",
       width: 900,
       height: 693,
+      zoom: {
+        src: "/art/zoom/cma-146135.jpg",
+        width: 3000,
+        height: 2309,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -775,6 +965,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-147115.jpg",
       width: 660,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-147115.jpg",
+        width: 2200,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -794,6 +989,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-148901.jpg",
       width: 690,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-148901.jpg",
+        width: 2299,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -813,6 +1013,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-151945.jpg",
       width: 610,
       height: 893,
+      zoom: {
+        src: "/art/zoom/cma-151945.jpg",
+        width: 2049,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -832,6 +1037,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-159216.jpg",
       width: 737,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-159216.jpg",
+        width: 2457,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -851,6 +1061,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-161433.jpg",
       width: 625,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-161433.jpg",
+        width: 2082,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -870,6 +1085,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-164630.jpg",
       width: 1125,
       height: 893,
+      zoom: {
+        src: "/art/zoom/cma-164630.jpg",
+        width: 3000,
+        height: 2381,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",
@@ -889,6 +1109,11 @@ export const collection: Record<string, Omit<Artwork, "id">> = {
       src: "/art/cma-715339.jpg",
       width: 688,
       height: 900,
+      zoom: {
+        src: "/art/zoom/cma-715339.jpg",
+        width: 2292,
+        height: 3000,
+      },
     },
     credit: {
       institution: "Cleveland Museum of Art",

@@ -39,6 +39,10 @@ type Hung = {
   dark: boolean;
   pool: THREE.MeshBasicMaterial;
   canvas: THREE.MeshStandardMaterial;
+  /** The painted face, for finding it on screen. */
+  face: THREE.Mesh;
+  /** Swapped for the sharper copy once you stand in front of it. */
+  sharp?: "loading" | "done";
   views?: { textures: (THREE.Texture | null)[]; over: THREE.MeshStandardMaterial };
   load?: () => void;
 };
@@ -46,6 +50,8 @@ type Hung = {
 export type Furnishing = {
   /** Loads the pictures for a floor (once); call for the floors near the visitor. */
   loadLevel(level: number): void;
+  /** A painting's face, to find where it is on screen. */
+  face(id: string): THREE.Mesh | undefined;
   update(s: { pos: Vec; focusId: string | null; hoverId: string | null }): void;
 };
 
@@ -143,14 +149,14 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
       hit.userData.focus = focus;
       g.add(hit);
       k.pickables.push(hit);
-      return { g, canvasMat, pool, w, h, outerW: ow + 2 * p };
+      return { g, face, canvasMat, pool, w, h, outerW: ow + 2 * p };
     };
 
     for (const art of b.artworks.filter((a) => a.level === level.index)) {
       const room = b.rooms[art.room];
       const img = art.image;
       const piece = hang(art.id, art, img ? img.width / img.height : 4 / 3, art.frame, { kind: "art", art });
-      const entry: Hung = { id: art.id, art, level: level.index, dark, pool: piece.pool, canvas: piece.canvasMat };
+      const entry: Hung = { id: art.id, art, level: level.index, dark, pool: piece.pool, canvas: piece.canvasMat, face: piece.face };
       hung.push(entry);
       if (art.frames) {
         // Two layers: the nearest view, and the next fading in as you walk past.
@@ -174,7 +180,9 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
       } else if (img) {
         entry.load = () =>
           loadArt(img.src, img.width, img.height, maxPx)
-            .then((c) => setImage(piece.canvasMat, k.tex(c)))
+            .then((c) => {
+              if (entry.sharp !== "done") setImage(piece.canvasMat, k.tex(c));
+            })
             .catch(() => {});
       } else {
         setImage(piece.canvasMat, k.tex(placeholderArt(room.movement.pattern, room.movement.palette, seedFrom(art.id))));
@@ -414,8 +422,20 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
       loaded.add(level);
       for (const h of hung) if (h.level === level) h.load?.();
     },
+    face: (id) => hung.find((h) => h.id === id)?.face,
     update(s) {
       for (const h of hung) {
+        // In front of a painting: load the large copy, so it holds up close.
+        const zoom = h.art?.zoom;
+        if (h.id === s.focusId && zoom && !h.sharp && !h.views && !k.low && loaded.has(h.level)) {
+          h.sharp = "loading";
+          loadArt(zoom.src, zoom.width, zoom.height, 2048)
+            .then((c) => {
+              h.sharp = "done";
+              setImage(h.canvas, k.tex(c));
+            })
+            .catch(() => {});
+        }
         const lit = h.id === s.focusId ? 1 : h.id === s.hoverId ? 0.6 : 0;
         h.pool.opacity += ((h.dark ? 0.26 : 0.16) + lit * 0.22 - h.pool.opacity) * 0.15;
         h.canvas.emissiveIntensity += (0.16 + lit * 0.14 - h.canvas.emissiveIntensity) * 0.15;

@@ -67,6 +67,11 @@ export type MuseumScene = {
   render(state: ViewState): void;
   /** What's under a point on screen, in normalized device coordinates. */
   pick(x: number, y: number): Pick;
+  /**
+   * Where a painting is on screen, in CSS pixels from the canvas's top left,
+   * as of the last frame; null when it isn't drawn or is behind the camera.
+   */
+  artRect(id: string): { left: number; top: number; width: number; height: number } | null;
   /** The nearest car, for the sound of the street. */
   nearestCar(p: Vec): { dist: number; dx: number; speed: number };
   /** Other visitors, as circles to keep out of. */
@@ -503,6 +508,8 @@ export function createMuseumScene(
   let wideOpen = true;
   const artGroups = levels.map((g) => g.children.find((c) => c.userData.art));
   const near = new Set<number>();
+  const view = { width: 1, height: 1 };
+  const corner = new THREE.Vector3();
 
   /** Out in the open (the atrium, the lobby, the terrace, the street): every floor may be in view. */
   const openView = (s: ViewState, cam: THREE.Vector3) => {
@@ -516,6 +523,8 @@ export function createMuseumScene(
     resize(width, height, dpr) {
       renderer.setPixelRatio(dpr);
       renderer.setSize(width, height, false);
+      view.width = width;
+      view.height = height;
       camera.aspect = width / Math.max(1, height);
       // A taller frame on phones needs a wider vertical view to feel the same.
       baseFov = camera.aspect < 1 ? 78 : 66;
@@ -643,6 +652,38 @@ export function createMuseumScene(
         return null;
       }
       return null;
+    },
+
+    artRect(id) {
+      const face = furnishing.face(id);
+      if (!face) return null;
+      for (let o: THREE.Object3D | null = face; o; o = o.parent) if (!o.visible) return null;
+      const geo = face.geometry as THREE.PlaneGeometry;
+      const { width: w, height: h } = geo.parameters;
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      for (const [cx, cy] of [
+        [-w / 2, -h / 2],
+        [w / 2, -h / 2],
+        [-w / 2, h / 2],
+        [w / 2, h / 2],
+      ]) {
+        corner.set(cx, cy, 0).applyMatrix4(face.matrixWorld);
+        // Behind the camera: there's no honest rectangle to give.
+        if (corner.clone().applyMatrix4(camera.matrixWorldInverse).z > -camera.near) return null;
+        corner.project(camera);
+        const sx = ((corner.x + 1) / 2) * view.width;
+        const sy = ((1 - corner.y) / 2) * view.height;
+        x0 = Math.min(x0, sx);
+        y0 = Math.min(y0, sy);
+        x1 = Math.max(x1, sx);
+        y1 = Math.max(y1, sy);
+      }
+      // Well off screen isn't worth flying from.
+      if (x1 < 0 || y1 < 0 || x0 > view.width || y0 > view.height) return null;
+      return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
     },
 
     nearestCar: (p) => city.nearestCar(p),

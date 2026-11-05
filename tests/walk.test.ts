@@ -241,4 +241,14 @@ describe("lenticular works", () => {
     expect(lenticular.length).toBeGreaterThanOrEqual(3);
     for (const a of lenticular) expect(a.frames!.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("gives the walk a large copy to zoom into for public-domain works and Studio pieces", () => {
+    const pd = building.artworks.filter((a) => a.credit);
+    expect(pd.filter((a) => a.zoom).length).toBeGreaterThan(pd.length * 0.8);
+    for (const a of building.artworks.filter((x) => x.zoom)) {
+      expect(a.zoom!.width, a.id).toBeGreaterThanOrEqual(a.image!.width);
+    }
+    // Code-drawn pieces are SVG: their own file is sharp at any size.
+    for (const a of building.artworks.filter((x) => x.generative && !x.frames)) expect(a.zoom?.src, a.id).toBe(a.image!.src);
+  });
 });

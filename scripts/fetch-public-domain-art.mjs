@@ -8,7 +8,8 @@
  * Curators list works in `src/content/exhibitions.ts` as `pd("aic", 27992)` or
  * `pd("cma", 143278)`. This script finds those calls, asks the holding museum's
  * open-access API for metadata, checks that the work is really public domain,
- * saves the image to `public/art/`, and writes `src/content/collection.generated.ts`.
+ * saves the image to `public/art/` and a large copy for zooming in to
+ * `public/art/zoom/`, and writes `src/content/collection.generated.ts`.
  *
  * Sources (both release public-domain images and data under CC0):
  *   aic  Art Institute of Chicago   https://api.artic.edu/docs/
@@ -22,10 +23,14 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXHIBITIONS = path.join(ROOT, "src/content/exhibitions.ts");
 const OUT_DIR = path.join(ROOT, "public/art");
+const ZOOM_DIR = path.join(OUT_DIR, "zoom");
+/** Long edge of the zoom copy: brushstrokes up close, about a megabyte a picture. */
+const ZOOM_EDGE = 3000;
 const OUT_TS = path.join(ROOT, "src/content/collection.generated.ts");
 const USER_AGENT = "ai-moma (https://github.com/WaltXin/ai-moma)";
 const LATEST_DEATH_YEAR = new Date().getFullYear() - 71;
@@ -75,6 +80,8 @@ async function fromAic(id) {
     dateLabel: d.date_display,
     medium: d.medium_display,
     imageUrl: `https://www.artic.edu/iiif/2/${d.image_id}/full/843,/0/default.jpg`,
+    // The largest size the museum serves for anyone: the whole picture within 3000 × 3000.
+    zoomUrl: `https://www.artic.edu/iiif/2/${d.image_id}/full/!${ZOOM_EDGE},${ZOOM_EDGE}/0/default.jpg`,
     credit: {
       institution: "Art Institute of Chicago",
       line: d.credit_line ?? undefined,
@@ -99,6 +106,7 @@ async function fromCma(id) {
     dateLabel: d.creation_date,
     medium: capitalize(d.technique),
     imageUrl: d.images.web.url,
+    zoomUrl: d.images.print?.url,
     credit: {
       institution: "Cleveland Museum of Art",
       line: d.creditline ?? undefined,
@@ -123,13 +131,43 @@ function jpegSize(buf) {
   throw new Error("JPEG size not found");
 }
 
+async function download(url) {
+  const res = await fetch(url, { headers: { "AIC-User-Agent": USER_AGENT } });
+  if (!res.ok) throw new Error(`image ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * The large copy for zooming in, re-encoded to keep the repository small.
+ * Skipped (undefined) when the museum has nothing much bigger than the wall image.
+ */
+async function zoomCopy(key, url, base) {
+  const file = path.join(ZOOM_DIR, `${key}.jpg`);
+  let buf;
+  if (existsSync(file) && !force) {
+    buf = await readFile(file);
+  } else {
+    if (!url) return undefined;
+    const big = await download(url);
+    buf = await sharp(big)
+      .resize(ZOOM_EDGE, ZOOM_EDGE, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 78, mozjpeg: true, progressive: true })
+      .toBuffer();
+    const { width } = jpegSize(buf);
+    if (width < base.width * 1.5) return undefined;
+    await writeFile(file, buf);
+  }
+  const { width, height } = jpegSize(buf);
+  return { src: `/art/zoom/${key}.jpg`, width, height };
+}
+
 async function main() {
   const source = await readFile(EXHIBITIONS, "utf8");
   const wanted = [
     ...new Map([...source.matchAll(PD_CALL)].map((m) => [`${m[1]}-${m[2]}`, m])).values(),
   ];
   console.log(`Found ${wanted.length} public-domain works in exhibitions.ts`);
-  await mkdir(OUT_DIR, { recursive: true });
+  await mkdir(ZOOM_DIR, { recursive: true });
 
   const works = {};
   const failures = [];
@@ -149,12 +187,14 @@ async function main() {
       if (existsSync(file) && !force) {
         buf = await readFile(file);
       } else {
-        const res = await fetch(meta.imageUrl, { headers: { "AIC-User-Agent": USER_AGENT } });
-        if (!res.ok) throw new Error(`image ${res.status}`);
-        buf = Buffer.from(await res.arrayBuffer());
+        buf = await download(meta.imageUrl);
         await writeFile(file, buf);
       }
       const { width, height } = jpegSize(buf);
+      const zoom = await zoomCopy(key, meta.zoomUrl, { width, height }).catch((err) => {
+        console.warn(`  ! ${key}  no zoom copy: ${err.message}`);
+        return undefined;
+      });
 
       works[key] = {
         title: clean(meta.title),
@@ -162,7 +202,7 @@ async function main() {
         year: meta.year,
         dateLabel: clean(meta.dateLabel),
         medium: clean(meta.medium) || "Unknown medium",
-        source: { kind: "image", src: `/art/${key}.jpg`, width, height },
+        source: { kind: "image", src: `/art/${key}.jpg`, width, height, ...(zoom && { zoom }) },
         credit: { ...meta.credit, line: clean(meta.credit.line) },
       };
       console.log(`  ✓ ${key}  ${meta.artist}, ${meta.title}`);
