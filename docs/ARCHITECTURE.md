@@ -41,6 +41,8 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
               architecture.ts   walls with reveals, floors with baked soft shadows, laylights,
                                 slab edges and glass balustrades, stairs, the glass lift,
                                 the rippled façade, the oculus
+              bake.worker.ts    the light round every floor, traced off the main thread
+                                  src/lib/walk/light.ts   (pure, tested)
               furnishing.ts     paintings under their spots, labels, lecterns, furniture,
                                 lettering, kiosks, sun through the windows
               city.ts           sky with clouds, the street and its traffic, the city round it
@@ -70,6 +72,18 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
   drawn, and paintings and other visitors only near you. Pictures load for your floor and the
   floors either side. Exposure adapts: brighter in the galleries, stopped down in the street.
   The sun follows the time of day, within opening hours.
+- **Baked light.** `lib/walk/light.ts` traces how light gets round each floor: from the
+  laylights over the galleries, the downlights elsewhere, the windows and the atrium's skylight,
+  then two bounces off the walls, floors and ceilings (in their own colours, toned down). So
+  walls darken towards the floor and into corners, floors fall off away from the laylights, and
+  a bright room spills through its doorway. Each floor's walls get a rectangle in a small atlas
+  (`lightLayout()`), its floor and ceiling a plan; `bake.worker.ts` bakes the visitor's floor
+  first, then the rest, in about a second each. The bake is relative light per kind of surface
+  (1 = a gallery's typical wall, floor or ceiling): the shader multiplies it into the surface's
+  colour (and dims the floor's reflections by it) instead of adding light, so the scene's own
+  lights still balance floors against walls, and furniture, paintings and visitors keep them.
+  It fades in over the old vertex shading as it arrives. Phones bake coarser, with one bounce.
+  In development, `window.__light.force(0 | 1)` switches it off and on to compare.
 - **Controls.** Drag to look; WASD / arrows; click the floor (any floor) to walk there; click a
   painting to walk up to it; E opens what you're facing; F opens the floor directory; scroll,
   pinch or V steps the camera back to show your avatar.

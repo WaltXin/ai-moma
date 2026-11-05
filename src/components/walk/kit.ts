@@ -8,38 +8,38 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
  * whole building draws in a few hundred calls.
  */
 
-/** Collects quads into one geometry. Colours are per-vertex shading (1 = full). */
+/**
+ * Collects quads into one geometry. Colours are per-vertex shading (1 = full).
+ * A second set of texture coordinates (`uv1`) places each quad in a
+ * lightmap: given a plan, level quads map onto it from above; walls pass
+ * their own.
+ */
 export class Quads {
   pos: number[] = [];
   nor: number[] = [];
   col: number[] = [];
   uv: number[] = [];
-  uv1: number[] | null = null;
+  uv1: number[] = [];
 
-  constructor(lightmap?: { x0: number; z0: number; w: number; h: number }) {
-    if (lightmap) {
-      this.uv1 = [];
-      this.map = lightmap;
-    }
-  }
-  private map?: { x0: number; z0: number; w: number; h: number };
+  constructor(private readonly map?: { x0: number; z0: number; w: number; h: number }) {}
 
   /** Four corners counter-clockwise as seen from the front. */
-  add(p: THREE.Vector3Tuple[], n: THREE.Vector3Tuple, c: number[] = [1, 1, 1, 1], uv?: number[][]) {
+  add(p: THREE.Vector3Tuple[], n: THREE.Vector3Tuple, c: number[] = [1, 1, 1, 1], uv?: number[][], uv1?: number[][]) {
     for (const i of [0, 1, 2, 0, 2, 3]) {
       this.pos.push(...p[i]);
       this.nor.push(...n);
       this.col.push(c[i], c[i], c[i]);
       this.uv.push(...(uv ? uv[i] : [0, 0]));
-      if (this.uv1 && this.map) {
-        this.uv1.push((p[i][0] - this.map.x0) / this.map.w, 1 - (p[i][2] - this.map.z0) / this.map.h);
-      }
+      if (uv1) this.uv1.push(...uv1[i]);
+      else if (this.map) this.uv1.push((p[i][0] - this.map.x0) / this.map.w, 1 - (p[i][2] - this.map.z0) / this.map.h);
+      else this.uv1.push(0, 0);
     }
   }
 
   /**
    * An upright quad along a→b from y0 to y1, facing (−dz, dx) of a→b.
    * `u0` offsets the texture along the wall; colours shade bottom and top.
+   * `lm` places it in a lightmap: [u at a, u at b, v at y0, v at y1].
    */
   wall(
     ax: number,
@@ -51,6 +51,7 @@ export class Quads {
     c0 = 1,
     c1 = 1,
     u0 = 0,
+    lm?: [number, number, number, number],
   ) {
     const dx = bx - ax;
     const dz = bz - az;
@@ -69,6 +70,12 @@ export class Quads {
         [u0 + len, y0],
         [u0 + len, y1],
         [u0, y1],
+      ],
+      lm && [
+        [lm[0], lm[2]],
+        [lm[1], lm[2]],
+        [lm[1], lm[3]],
+        [lm[0], lm[3]],
       ],
     );
   }
@@ -101,7 +108,7 @@ export class Quads {
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute("uv", new THREE.Float32BufferAttribute(this.uv, 2));
-    if (this.uv1) g.setAttribute("uv1", new THREE.Float32BufferAttribute(this.uv1, 2));
+    g.setAttribute("uv1", new THREE.Float32BufferAttribute(this.uv1, 2));
     return g;
   }
 }
@@ -128,7 +135,7 @@ const yAxis = new THREE.Vector3(0, 1, 0);
 
 /**
  * Geometry waiting to be merged, keyed by material. `flush()` turns each key
- * into one mesh on `parent`.
+ * into one mesh on `parent`. A batch `withLightmap` keeps each part's `uv1`.
  */
 export class Batch {
   private parts = new Map<string, THREE.BufferGeometry[]>();
@@ -136,6 +143,7 @@ export class Batch {
   constructor(
     private readonly materials: (key: string) => THREE.Material,
     private readonly keep: <T extends { dispose(): void }>(x: T) => T,
+    private readonly withLightmap = false,
   ) {}
 
   /** Adds a copy of `g`, moved to (x, y, z), turned `yaw` about y and scaled by `scale`. */
@@ -171,8 +179,12 @@ export class Batch {
       g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
     }
     if (g.index) g = g.toNonIndexed();
+    const keepNames = this.withLightmap ? ["position", "normal", "color", "uv", "uv1"] : ["position", "normal", "color", "uv"];
     for (const name of Object.keys(g.attributes)) {
-      if (!["position", "normal", "color", "uv"].includes(name)) g.deleteAttribute(name);
+      if (!keepNames.includes(name)) g.deleteAttribute(name);
+    }
+    if (this.withLightmap && !g.getAttribute("uv1")) {
+      g.setAttribute("uv1", new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute("position").count * 2), 2));
     }
     const list = this.parts.get(key);
     if (list) list.push(g);
