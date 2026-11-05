@@ -1,5 +1,7 @@
-import { type FloorPlan, Tile, tileAt } from "./floor-plan";
-import type { Vec } from "./motion";
+import { type Building, type Surface, spaceAt } from "./building";
+import { type Place, stairAt } from "./motion";
+
+export type { Surface } from "./building";
 
 /**
  * The sound of a walk, as data: each floor's musical mood, and what the
@@ -29,6 +31,21 @@ export type Mood = {
 
 /** One mood per floor, chosen to suit its art, never a quotation of any piece. */
 const FLOOR_MOODS: Record<string, Mood> = {
+  // The lobby: bright and spacious, a few notes in a lot of air.
+  lobby: {
+    root: 64,
+    scale: [0, 2, 4, 7, 9],
+    chords: [
+      [0, 2, 4],
+      [3, 0, 1],
+      [1, 3, 0],
+      [4, 1, 2],
+    ],
+    beat: 0.7,
+    density: 0.26,
+    brightness: 2600,
+    range: [4, 12],
+  },
   // Impressionism: a bright, floating Lydian, unhurried.
   "light-and-color": {
     root: 62,
@@ -166,12 +183,28 @@ export function nextDegree(mood: Mood, from: number, rand: () => number): number
   return Math.max(lo, Math.min(hi, next));
 }
 
+/** The music for where a visitor is: the lobby's, or their floor's. */
+export function moodAt(b: Building, at: Place): Mood {
+  const space = spaceAt(b.levels[at.level], at.pos);
+  if (at.level === 0 && (!space || ["lobby", "cafe", "shop", "outside"].includes(space.kind))) {
+    return FLOOR_MOODS.lobby;
+  }
+  return moodFor(b.levels[at.level].slug);
+}
+
 /** Metres between footfalls; matches the head bob of the walk (two steps per sway). */
 export const STEP = Math.PI / 4.2;
 
-export type Surface = "wood" | "stone";
+/** What the visitor is standing on: oak in the galleries and on the stairs, stone in the lobby, the street outside. */
+export function surfaceAt(b: Building, at: Place): Surface {
+  if (stairAt(b, at.level, at.pos)) return "wood";
+  return spaceAt(b.levels[at.level], at.pos)?.surface ?? "stone";
+}
 
-/** What the visitor is standing on: oak in the rooms and lounge, terrazzo in the corridor. */
-export function surfaceAt(plan: FloorPlan, p: Vec): Surface {
-  return tileAt(plan, Math.floor(p.x), Math.floor(p.z)) === Tile.Corridor ? "stone" : "wood";
+/** How a place sounds: the street, a big hall, or a room. */
+export function acousticsAt(b: Building, at: Place): "outside" | "hall" | "room" {
+  const space = spaceAt(b.levels[at.level], at.pos);
+  if (!space || space.kind === "outside" || space.kind === "terrace") return "outside";
+  if (space.kind === "lobby" || space.kind === "ring" || stairAt(b, at.level, at.pos)) return "hall";
+  return "room";
 }

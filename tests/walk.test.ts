@@ -1,183 +1,244 @@
 import { describe, expect, it } from "vitest";
 import { getExhibitionsOnFloor, getFloors, getMovements } from "@/lib/museum/registry";
+import { type Building, buildBuilding, inRect, spaceAt, stairPart } from "@/lib/walk/building";
 import {
-  FRAME_W,
-  ROW,
-  Tile,
-  buildFloorPlan,
-  canSee,
-  findPath,
-  isElevatorTile,
-  isWalkable,
-  tileAt,
-} from "@/lib/walk/floor-plan";
-import {
+  type Focus,
+  type Place,
   RADIUS,
-  artCenter,
-  atElevator,
   collides,
+  groundAt,
   lenticularView,
+  levelAfter,
+  liftExitPose,
   lookingAt,
   move,
   route,
-  spawnPose,
+  startPose,
   viewpoint,
 } from "@/lib/walk/motion";
 
-const plans = getFloors().map((floor) =>
-  buildFloorPlan({
-    floor,
-    exhibitions: getExhibitionsOnFloor(floor),
-    movements: getMovements(),
-    floors: getFloors(),
-  }),
-);
+const building: Building = buildBuilding({
+  floors: getFloors(),
+  exhibitionsOn: getExhibitionsOnFloor,
+  movements: getMovements(),
+  labs: ["perception"],
+});
 
-describe("floor plans", () => {
-  it("builds one room per exhibition and hangs every artwork", () => {
-    for (const [i, floor] of getFloors().entries()) {
-      const exhibitions = getExhibitionsOnFloor(floor);
-      expect(plans[i].rooms.map((r) => r.slug)).toEqual(exhibitions.map((e) => e.slug));
-      expect(plans[i].artworks).toHaveLength(exhibitions.flatMap((e) => e.artworks).length);
+/** Walks a route the way the walk does, in small steps; returns where it ends up. */
+function walk(b: Building, from: Place, legs: { x: number; z: number }[]): Place {
+  let at = from;
+  for (const leg of legs) {
+    for (let n = 0; n < 4000 && Math.hypot(leg.x - at.pos.x, leg.z - at.pos.z) > 1e-6; n++) {
+      const dx = leg.x - at.pos.x;
+      const dz = leg.z - at.pos.z;
+      const k = Math.min(1, 0.08 / Math.hypot(dx, dz));
+      const before = at.pos;
+      at = move(b, at, { x: dx * k, z: dz * k });
+      // Stuck against something the route said was clear.
+      if (Math.hypot(at.pos.x - before.x, at.pos.z - before.z) < 1e-9) break;
+    }
+  }
+  return at;
+}
+
+describe("the building", () => {
+  it("has a floor per floor of content, in order, with every exhibition as a room on it", () => {
+    const floors = getFloors();
+    expect(building.levels.map((l) => l.slug)).toEqual(floors.map((f) => f.slug));
+    for (const [i, floor] of floors.entries()) {
+      const rooms = building.rooms.filter((r) => r.level === i);
+      expect(rooms.map((r) => r.slug)).toEqual(getExhibitionsOnFloor(floor).map((e) => e.slug));
+    }
+    const works = floors.flatMap((f) => getExhibitionsOnFloor(f).flatMap((e) => e.artworks));
+    expect(building.artworks.map((a) => a.id).sort()).toEqual(works.map((a) => a.id).sort());
+  });
+
+  it("is plain data", () => {
+    expect(JSON.parse(JSON.stringify(building))).toEqual(building);
+  });
+
+  it("stacks the floors, lobby tallest, with a terrace the upper floors step back from", () => {
+    const ys = building.levels.map((l) => l.y);
+    for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeGreaterThan(ys[i - 1]);
+    expect(building.levels[0].ceiling).toBeGreaterThan(building.levels[1].ceiling);
+    const terrace = building.levels.findIndex((l) => l.spaces.some((s) => s.kind === "terrace"));
+    expect(terrace).toBeGreaterThan(0);
+    for (const l of building.levels.slice(terrace + 1)) {
+      expect(building.footprints[l.index].x1).toBeLessThan(building.footprints[terrace].x1);
     }
   });
 
-  it("is fully serializable", () => {
-    for (const plan of plans) expect(JSON.parse(JSON.stringify(plan))).toEqual(plan);
-  });
-
-  it("keeps paintings on the wall inside their room without overlapping", () => {
-    for (const plan of plans) {
-      for (const art of plan.artworks) {
-        const room = plan.rooms[art.room];
-        expect(art.x).toBeGreaterThanOrEqual(room.x);
-        expect(art.x + FRAME_W).toBeLessThanOrEqual(room.x + room.w);
-        for (let dx = 0; dx < FRAME_W; dx++) {
-          expect(tileAt(plan, art.x + dx, ROW.faceBottom)).toBe(Tile.Face);
+  it("hangs every work on a wall of its own room, facing in, apart from the others and clear of doors", () => {
+    for (const room of building.rooms) {
+      const works = building.artworks.filter((a) => building.rooms[a.room] === room);
+      const spots = [...works, ...room.emptySlots];
+      const r = room.rect;
+      for (const s of spots) {
+        // On one of the four inside faces.
+        const onWall =
+          (Math.abs(s.x - r.x0) < 1e-6 && s.nx === 1) ||
+          (Math.abs(s.x - r.x1) < 1e-6 && s.nx === -1) ||
+          (Math.abs(s.z - r.z0) < 1e-6 && s.nz === 1) ||
+          (Math.abs(s.z - r.z1) < 1e-6 && s.nz === -1);
+        expect(onWall, `${room.slug} at ${s.x},${s.z}`).toBe(true);
+        expect(inRect(r, s, 1e-6)).toBe(true);
+        // Nothing hangs over a doorway.
+        const level = building.levels[room.level];
+        for (const w of level.walls) {
+          const alongX = w.z0 === w.z1;
+          const line = alongX ? w.z0 : w.x0;
+          const at = alongX ? s.z : s.x;
+          if (Math.abs(line - at) > w.thick) continue;
+          const p = alongX ? s.x : s.z;
+          const start = alongX ? w.x0 : w.z0;
+          for (const o of w.openings) {
+            if (o.kind !== "door") continue;
+            expect(p < start + o.from - 1 || p > start + o.to + 1, `${room.slug}: ${p} by a door`).toBe(true);
+          }
         }
       }
-      const xs = plan.artworks.map((a) => a.x).sort((a, b) => a - b);
-      for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThan(FRAME_W - 1);
-    }
-  });
-
-  it("lets a visitor walk from the elevator to see every painting and info stand", () => {
-    for (const plan of plans) {
-      for (const art of plan.artworks) {
-        const spot = { x: art.x + 1, y: ROW.roomTop };
-        expect(canSee(art, spot.x, spot.y)).toBe(true);
-        expect(findPath(plan, plan.spawn, spot), `${plan.floor.slug}: ${art.id}`).not.toBeNull();
+      for (let i = 0; i < spots.length; i++) {
+        for (let j = i + 1; j < spots.length; j++) {
+          expect(Math.hypot(spots[i].x - spots[j].x, spots[i].z - spots[j].z)).toBeGreaterThan(2.2);
+        }
       }
-      for (const room of plan.rooms) {
-        const beside = { x: room.pedestal.x - 1, y: room.pedestal.y };
-        expect(isWalkable(tileAt(plan, beside.x, beside.y))).toBe(true);
-        expect(findPath(plan, plan.spawn, beside)).not.toBeNull();
-      }
-      const lift = { x: plan.elevator.x, y: ROW.roomTop };
-      expect(isElevatorTile(plan, lift.x, lift.y)).toBe(true);
-      expect(findPath(plan, plan.spawn, lift)).not.toBeNull();
+    }
+    // The Community Gallery keeps frames waiting for visitors' work.
+    const community = building.rooms.find((r) => r.kind === "community")!;
+    expect(community.emptySlots.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("starts a visit inside the front doors, clear of everything", () => {
+    const s = startPose(building);
+    expect(s.level).toBe(0);
+    expect(collides(building, 0, s.pos)).toBe(false);
+    expect(spaceAt(building.levels[0], s.pos)?.kind).toBe("lobby");
+    for (const l of building.levels) {
+      expect(collides(building, l.index, liftExitPose(building, l.index).pos), l.slug).toBe(false);
+    }
+  });
+});
+
+describe("walking the building", () => {
+  const start = startPose(building);
+
+  it("walks from the front doors to every painting, lectern, kiosk, the desk and the lift on every floor", () => {
+    const targets: Focus[] = [
+      ...building.artworks.map((art) => ({ kind: "art" as const, art })),
+      ...building.rooms.map((room) => ({ kind: "room" as const, room })),
+      ...building.portals.map((portal) => ({ kind: "portal" as const, portal })),
+      { kind: "desk" },
+    ];
+    const lifts = building.levels.map((l) => ({ f: { kind: "lift" } as Focus, level: l.index }));
+    for (const t of [...targets.map((f) => ({ f, level: 0 })), ...lifts]) {
+      const view = viewpoint(building, t.f, t.level);
+      const label = `${t.f.kind} on ${building.levels[view.level].slug}`;
+      expect(collides(building, view.level, view.at), label).toBe(false);
+      const legs = route(building, { level: start.level, pos: start.pos }, { level: view.level, pos: view.at });
+      expect(legs, label).not.toBeNull();
+      const end = walk(building, start, legs!);
+      expect(end.level, label).toBe(view.level);
+      expect(Math.hypot(end.pos.x - view.at.x, end.pos.z - view.at.z), label).toBeLessThan(1e-3);
+      // And from there, it's what the visitor is looking at.
+      expect(lookingAt(building, { level: view.level, pos: view.at }, view.yaw), label).toEqual(t.f);
     }
   });
 
-  it("finds shortest paths and refuses walls", () => {
-    const plan = plans[0];
-    const path = findPath(plan, plan.spawn, { x: plan.spawn.x + 2, y: plan.spawn.y });
-    expect(path).toEqual([
-      { x: plan.spawn.x + 1, y: plan.spawn.y },
-      { x: plan.spawn.x + 2, y: plan.spawn.y },
-    ]);
-    expect(findPath(plan, plan.spawn, { x: 0, y: 0 })).toBeNull();
+  it("climbs the grand stair to Floor 2, rising step by step, and comes back down", () => {
+    const grand = building.stairs.find((s) => s.kind === "grand")!;
+    const x = (grand.rect.x0 + grand.rect.x1) / 2;
+    let at: Place = { level: 0, pos: { x, z: grand.rect.z1 + 1 } };
+    let lastY = groundAt(building, 0, at.pos);
+    for (let i = 0; i < 200; i++) {
+      at = move(building, at, { x: 0, z: -0.08 });
+      const y = groundAt(building, at.level, at.pos);
+      expect(y).toBeGreaterThanOrEqual(lastY - 1e-9);
+      lastY = y;
+    }
+    expect(at.level).toBe(1);
+    expect(lastY).toBe(building.levels[1].y);
+    for (let i = 0; i < 200; i++) at = move(building, at, { x: 0, z: 0.08 });
+    expect(at.level).toBe(0);
+    expect(groundAt(building, 0, at.pos)).toBe(0);
   });
 
-  it("ends every floor in a walkable lounge and never builds a sliver of a map", () => {
-    for (const plan of plans) {
-      expect(plan.cols).toBeGreaterThanOrEqual(56);
-      const seat = { x: plan.lounge.x + 1, y: ROW.roomTop + 1 };
-      expect(isWalkable(tileAt(plan, seat.x, seat.y))).toBe(true);
-      expect(findPath(plan, plan.spawn, seat), plan.floor.slug).not.toBeNull();
+  it("joins each floor to the next by a stair across the atrium", () => {
+    for (let i = 1; i + 1 < building.levels.length; i++) {
+      const s = building.stairs.find((st) => st.from === i && st.to === i + 1);
+      expect(s, `floor ${i + 1} up`).toBeDefined();
+      // Both halves of the flight belong to the floors it joins.
+      expect(stairPart(s!, i)).not.toBeNull();
+      expect(stairPart(s!, i + 1)).not.toBeNull();
     }
   });
 
-  it("shows the first view from the left of a lenticular piece and the last from the right", () => {
-    const art = { x: 10 };
-    expect(lenticularView(art, 3, 0)).toBe(0);
-    expect(lenticularView(art, 3, 30)).toBe(2);
-    const mid = lenticularView(art, 3, art.x + 1.5);
+  it("can't step onto a stair from the side, or off a balcony into the atrium", () => {
+    const grand = building.stairs.find((s) => s.kind === "grand")!;
+    // From the lobby, beside the stair halfway up: blocked, and still on the ground floor.
+    const beside: Place = { level: 0, pos: { x: grand.rect.x1 + 0.6, z: (grand.rect.z0 + grand.rect.z1) / 2 + 1 } };
+    const pushed = move(building, beside, { x: -3, z: 0 });
+    expect(pushed.level).toBe(0);
+    expect(pushed.pos.x).toBeGreaterThan(grand.rect.x1);
+    // On Floor 3, walking into the atrium stops at the glass.
+    const a = building.atrium;
+    const balcony: Place = { level: 2, pos: { x: a.x1 + 2, z: (a.z0 + a.z1) / 2 } };
+    expect(collides(building, 2, balcony.pos)).toBe(false);
+    const stopped = move(building, balcony, { x: -5, z: 0 });
+    expect(stopped.pos.x).toBeGreaterThan(a.x1 + RADIUS - 1e-6);
+  });
+
+  it("stops at walls and slides along them, and only gets through glass at a door", () => {
+    // Into the lobby's north wall: stop a body's width short of it.
+    const stopped = move(building, { level: 0, pos: { x: 24, z: 13 } }, { x: 0, z: -10 });
+    expect(stopped.pos.z).toBeGreaterThan(10);
+    expect(stopped.pos.z).toBeLessThan(10.15 + RADIUS + 0.05);
+    const slid = move(building, stopped, { x: 1, z: -1 });
+    expect(slid.pos.x).toBeCloseTo(stopped.pos.x + 1, 5);
+    // The glass front: solid beside the doors, open through them, out onto the street.
+    const glass = move(building, { level: 0, pos: { x: 16, z: 40 } }, { x: 0, z: 5 });
+    expect(glass.pos.z).toBeLessThan(building.entrance.doors.z);
+    const out = move(building, { level: 0, pos: { x: 24, z: 40 } }, { x: 0, z: 5 });
+    expect(out.pos.z).toBeGreaterThan(building.entrance.doors.z + 1);
+    expect(spaceAt(building.levels[0], out.pos)?.kind).toBe("outside");
+    // But not into the road.
+    const kerb = move(building, out, { x: 0, z: 20 });
+    expect(kerb.pos.z).toBeLessThan(50);
+  });
+
+  it("changes floor only halfway up a flight", () => {
+    const s = building.stairs.find((st) => st.kind === "atrium")!;
+    const x = (s.rect.x0 + s.rect.x1) / 2;
+    const bottomZ = s.rise === "n" ? s.rect.z1 : s.rect.z0;
+    const dir = s.rise === "n" ? -1 : 1;
+    const len = s.rect.z1 - s.rect.z0;
+    expect(levelAfter(building, s.from, { x, z: bottomZ + dir * len * 0.4 })).toBe(s.from);
+    expect(levelAfter(building, s.from, { x, z: bottomZ + dir * len * 0.52 })).toBe(s.to);
+    expect(levelAfter(building, s.to, { x, z: bottomZ + dir * len * 0.48 })).toBe(s.from);
+  });
+
+  it("only offers paintings you are facing", () => {
+    const art = building.artworks[0];
+    const view = viewpoint(building, { kind: "art", art });
+    const at = { level: view.level, pos: view.at };
+    expect(lookingAt(building, at, view.yaw)).toEqual({ kind: "art", art });
+    expect(lookingAt(building, at, view.yaw + Math.PI)?.kind).not.toBe("art");
+  });
+});
+
+describe("lenticular works", () => {
+  it("shows the first view from the left of a piece and the last from the right", () => {
+    // On a north wall: facing it (looking north), left is west.
+    const art = { x: 10, z: 0, nx: 0, nz: 1 };
+    expect(lenticularView(art, 3, { x: 0, z: 3 })).toBe(0);
+    expect(lenticularView(art, 3, { x: 20, z: 3 })).toBe(2);
+    const mid = lenticularView(art, 3, { x: 10, z: 3 });
     expect(mid).toBeGreaterThan(0.5);
     expect(mid).toBeLessThan(1.5);
   });
 
-  it("passes every view of an Agamograph to the walkable floor", () => {
-    const perception = plans.find((p) => p.floor.slug === "perception")!;
-    const lenticular = perception.artworks.filter((a) => a.frames);
+  it("passes every view of an Agamograph to the walk", () => {
+    const lenticular = building.artworks.filter((a) => a.frames);
     expect(lenticular.length).toBeGreaterThanOrEqual(3);
     for (const a of lenticular) expect(a.frames!.length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("walking in 3D", () => {
-  it("starts every visitor clear of the walls, near the lift", () => {
-    for (const plan of plans) {
-      const { at } = spawnPose(plan);
-      expect(collides(plan, at), plan.floor.slug).toBe(false);
-      expect(atElevator(plan, at)).toBe(false);
-    }
-  });
-
-  it("stops at walls and slides along them", () => {
-    const plan = plans[0];
-    const { at } = spawnPose(plan);
-    // Straight at the back wall: stop a body's width short of it.
-    const stopped = move(plan, at, { x: 0, z: -20 });
-    expect(stopped.z).toBeCloseTo(ROW.roomTop + RADIUS, 2);
-    // At an angle: keep going sideways.
-    const slid = move(plan, stopped, { x: 1, z: -1 });
-    expect(slid.x).toBeCloseTo(stopped.x + 1, 5);
-    expect(slid.z).toBeCloseTo(stopped.z, 5);
-    // Never through a room's wall, even in one big jump.
-    const room = plan.rooms[0];
-    const inCorridor = { x: room.x + room.w - 1.5, z: ROW.corridorTop + 1 };
-    const jumped = move(plan, inCorridor, { x: 0, z: -5 });
-    expect(jumped.z).toBeGreaterThan(ROW.roomWall + 1);
-  });
-
-  it("can walk from the lift to stand in front of every painting, stand and the lift", () => {
-    for (const plan of plans) {
-      const { at } = spawnPose(plan);
-      const targets = [
-        ...plan.artworks.map((art) => ({ kind: "art" as const, art })),
-        ...plan.rooms.map((room) => ({ kind: "room" as const, room })),
-        { kind: "elevator" as const },
-      ];
-      for (const f of targets) {
-        const view = viewpoint(plan, f);
-        expect(collides(plan, view.at), `${plan.floor.slug}: ${f.kind}`).toBe(false);
-        const legs = route(plan, at, view.at);
-        expect(legs, `${plan.floor.slug}: ${f.kind}`).not.toBeNull();
-        // Walking the legs never clips a wall.
-        let p = at;
-        for (const leg of legs!) {
-          // Frame-sized steps, as the walk takes them.
-          for (let n = 0; n < 2000 && Math.hypot(leg.x - p.x, leg.z - p.z) > 1e-9; n++) {
-            const dx = leg.x - p.x;
-            const dz = leg.z - p.z;
-            const k = Math.min(1, 0.05 / Math.hypot(dx, dz));
-            p = move(plan, p, { x: dx * k, z: dz * k });
-          }
-          expect(Math.hypot(p.x - leg.x, p.z - leg.z)).toBeLessThan(1e-6);
-        }
-        // From there, it's what the visitor is looking at.
-        expect(lookingAt(plan, view.at, view.yaw)).toEqual(f);
-      }
-    }
-  });
-
-  it("only offers paintings you are facing", () => {
-    const plan = plans.find((p) => p.artworks.length)!;
-    const art = plan.artworks[0];
-    const view = viewpoint(plan, { kind: "art", art });
-    expect(lookingAt(plan, view.at, view.yaw)).toEqual({ kind: "art", art });
-    expect(lookingAt(plan, view.at, view.yaw + Math.PI)?.kind).not.toBe("art");
-    expect(artCenter(art).z).toBe(ROW.roomTop);
   });
 });

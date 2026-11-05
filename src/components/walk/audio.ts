@@ -68,6 +68,16 @@ export class MuseumAudio {
   private readonly sfx: GainNode;
   private readonly hum: GainNode;
   private readonly noise: AudioBuffer;
+  /** Return from the reverb: more in the atrium, none in the street. */
+  private readonly reverbOut: GainNode;
+  /** Voices far off in a big room: the murmur of other visitors. */
+  private readonly murmur: GainNode;
+  /** The street: traffic's rumble, louder as a car goes by, and where it is. */
+  private readonly street: GainNode;
+  private readonly car: GainNode;
+  private readonly carPan: StereoPannerNode;
+  private readonly carTone: BiquadFilterNode;
+  private place: "outside" | "hall" | "room" = "room";
   private score: Score | null = null;
   private mood: Mood | null = null;
   private suspendTimer = 0;
@@ -97,7 +107,8 @@ export class MuseumAudio {
 
     const reverb = ctx.createConvolver();
     reverb.buffer = impulse(ctx, 3.4);
-    reverb.connect(gain(ctx, 0.5, this.master));
+    this.reverbOut = gain(ctx, 0.5, this.master);
+    reverb.connect(this.reverbOut);
     this.wet = gain(ctx, 1, reverb);
 
     // White noise for footsteps and doors.
@@ -122,6 +133,51 @@ export class MuseumAudio {
     this.hum = gain(ctx, 0, this.master);
     hum.connect(humTone).connect(this.hum);
     hum.start();
+
+    // Murmur: pink-ish noise through a band of voices, swelling and fading slowly.
+    const voices = ctx.createBufferSource();
+    voices.buffer = brown;
+    voices.loop = true;
+    voices.playbackRate.value = 3.2;
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 480;
+    band.Q.value = 0.9;
+    const swell = ctx.createGain();
+    swell.gain.value = 0.6;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.21;
+    const lfoDepth = gain(ctx, 0.35);
+    lfo.connect(lfoDepth);
+    lfoDepth.connect(swell.gain);
+    lfo.start();
+    this.murmur = gain(ctx, 0, this.master);
+    voices.connect(band).connect(swell).connect(this.murmur);
+    swell.connect(gain(ctx, 0.6, this.wet));
+    voices.start();
+
+    // The street: a low wash of distant traffic, and the car going by.
+    const traffic = ctx.createBufferSource();
+    traffic.buffer = brown;
+    traffic.loop = true;
+    const trafficTone = ctx.createBiquadFilter();
+    trafficTone.type = "lowpass";
+    trafficTone.frequency.value = 420;
+    this.street = gain(ctx, 0, this.master);
+    traffic.connect(trafficTone).connect(this.street);
+    traffic.start();
+    const tyres = ctx.createBufferSource();
+    tyres.buffer = this.noise;
+    tyres.loop = true;
+    this.carTone = ctx.createBiquadFilter();
+    this.carTone.type = "bandpass";
+    this.carTone.frequency.value = 700;
+    this.carTone.Q.value = 0.6;
+    this.carPan = ctx.createStereoPanner();
+    this.car = gain(ctx, 0, this.carPan);
+    this.carPan.connect(this.master);
+    tyres.connect(this.carTone).connect(this.car);
+    tyres.start();
 
     // Stop work in a hidden tab, pick up where it left off on return.
     document.addEventListener("visibilitychange", () => {
@@ -149,7 +205,9 @@ export class MuseumAudio {
     this.score?.stop(1.5);
     this.score = null;
     this.mood = null;
-    this.hum.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
+    const t = this.ctx.currentTime;
+    for (const g of [this.hum, this.murmur, this.street, this.car]) g.gain.setTargetAtTime(0, t, 0.4);
+    this.place = "room";
   }
 
   setMuted(muted: boolean) {
@@ -166,6 +224,31 @@ export class MuseumAudio {
     }
   }
 
+  /**
+   * Where the visitor is: out in the street (traffic, no echo, the music far
+   * off), in a big hall (long echo, a murmur of voices) or in a room.
+   */
+  setPlace(place: "outside" | "hall" | "room") {
+    if (place === this.place) return;
+    this.place = place;
+    const t = this.ctx.currentTime;
+    this.reverbOut.gain.setTargetAtTime(place === "outside" ? 0.08 : place === "hall" ? 0.75 : 0.45, t, 0.6);
+    this.murmur.gain.setTargetAtTime(place === "hall" ? 0.05 : place === "room" ? 0.012 : 0, t, 1);
+    this.street.gain.setTargetAtTime(place === "outside" ? 0.22 : 0.015, t, 0.8);
+    this.musicLevel.gain.setTargetAtTime(place === "outside" ? 0.1 : 0.34, t, 1.2);
+    this.hum.gain.setTargetAtTime(place === "outside" ? 0 : 0.045, t, 0.8);
+  }
+
+  /** A car `dist` metres off, `pan` −1 (left) to 1 (right); quieter indoors. */
+  traffic(dist: number, pan: number, speed: number) {
+    const t = this.ctx.currentTime;
+    const near = Math.max(0, 1 - dist / 40);
+    const through = this.place === "outside" ? 1 : 0.08;
+    this.car.gain.setTargetAtTime(near * near * 0.12 * through * Math.min(1.3, speed / 10), t, 0.08);
+    this.carPan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.08);
+    this.carTone.frequency.setTargetAtTime(500 + near * 700, t, 0.1);
+  }
+
   /** Up close to a painting, the music steps back and softens. */
   focus(on: boolean) {
     const t = this.ctx.currentTime;
@@ -177,7 +260,8 @@ export class MuseumAudio {
     if (this.muted) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.005;
-    const wood = surface === "wood";
+    // Decking sounds like boards; the pavement like stone, without the echo.
+    const wood = surface === "wood" || surface === "deck";
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
     src.playbackRate.value = 0.85 + Math.random() * 0.3;
@@ -189,7 +273,7 @@ export class MuseumAudio {
     const env = envelope(ctx, t, level, wood ? 0.1 : 0.065);
     src.connect(band).connect(env);
     env.connect(this.sfx);
-    env.connect(gain(ctx, wood ? 0.12 : 0.3, this.wet));
+    env.connect(gain(ctx, surface === "street" || surface === "deck" ? 0.02 : wood ? 0.12 : 0.3, this.wet));
     src.start(t, Math.random() * 1.2, 0.2);
 
     if (wood) {

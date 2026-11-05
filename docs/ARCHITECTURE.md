@@ -20,52 +20,73 @@ changes.
 `validateMuseum()` checks the content graph (unique slugs, no dangling references, every
 exhibition on exactly one floor). It runs in the test suite, so a broken contribution fails CI.
 
-## Walkable floors
+## Walking the building
 
-`/floors/[floor]/walk` is the floor in 3D: you walk through it in first person, like a visit to
-a real museum. It's prerendered like the other floor pages:
+`/walk` is the museum in 3D: you come in through the front doors and walk it in first person,
+like a visit to a real museum. `/floors/[floor]/walk` is the same building, arriving by lift on
+that floor. Both are prerendered:
 
 ```
-floor content ──▶ buildFloorPlan()          src/lib/walk/floor-plan.ts   (server, pure)
-                    tiles (1 tile = 1 m), rooms, artwork positions, elevator
-              ──▶ <WalkableFloor plan>      src/components/walk/walkable-floor.tsx  (client)
-                    rAF walk loop, keyboard / drag-to-look / click-to-walk / touch stick,
-                    overlays: artwork viewer, room info, elevator
-                    │  movement, collisions, routes, "what am I facing"
-                    │    src/lib/walk/motion.ts   (pure, tested)
-                    ▼
-                  createMuseumScene()       src/components/walk/scene.ts   (three.js, loaded on demand)
-                    walls raised from the tiles, framed paintings under light pools,
-                    wall labels and room lettering (textures.ts), lift, lounge, avatar
+content ──▶ buildBuilding()            src/lib/walk/building.ts     (server, pure)
+              every floor stacked round an atrium, walls with doors and windows,
+              rooms filled in walking order, works hung round their walls,
+              stairs, the lift, furniture, the street outside
+        ──▶ <WalkableBuilding>          src/components/walk/walkable-building.tsx  (client)
+              rAF walk loop, keyboard / drag-to-look / click-to-walk / touch stick,
+              the welcome, the look up the atrium, lift rides; overlays
+              │  collisions, stairs, routes across floors, "what am I facing"
+              │    src/lib/walk/motion.ts   (pure, tested)
+              ▼
+            createMuseumScene()         src/components/walk/scene.ts   (three.js, loaded on demand)
+              architecture.ts   walls with reveals, floors with baked soft shadows, laylights,
+                                slab edges and glass balustrades, stairs, the glass lift,
+                                the rippled façade, the oculus
+              furnishing.ts     paintings under their spots, labels, lecterns, furniture,
+                                lettering, kiosks, sun through the windows
+              city.ts           sky with clouds, the street and its traffic, the city round it
+              people.ts         other visitors walking, looking, sitting
 ```
 
-- The scene is built from the plan, never modelled by hand, and paints its walls in the floor's
-  color. three.js is imported dynamically, so the page shell and header arrive first.
-- Controls: drag to look; WASD / arrows (left/right turn); click the floor to walk there; click
-  a painting to walk up to it; E opens what you're facing; scroll, pinch or V steps the camera
-  back to show your avatar. Phones get a thumb stick. Without WebGL the page links to the guide.
-- A visit starts in the lift. "Enter" (the click browsers need before playing sound) starts the
-  audio; the doors open and the visitor steps out. Taking the lift fades to black and arrives on
-  the next floor the same way, without the welcome. Any key or tap skips the walk out.
-- Sound (`components/walk/audio.ts`, Web Audio, no audio files): a generative score in each
-  floor's mood (`lib/walk/music.ts`: scale, chords, tempo, density), a low building hum,
-  footsteps on oak or terrazzo (`surfaceAt()`), and the lift's chime and doors, panned to where
-  they are, all in one reverb. One engine lives for the visit, so floors crossfade. M or the
-  Sound button mutes it (remembered in `localStorage`); a painting up close muffles the music.
-- In development, `window.__walk` holds the walk state and `window.__audio()` the audio engine,
-  so scripts can move the visitor and check the sound.
-
-- One room per exhibition, left to right in the floor's walking order, with paintings on the
-  room's back wall. Adding an exhibition to `floors.ts` adds a room; nobody draws maps by hand.
-- Every floor ends in a lounge (windows, sofas), widened on small floors so the map is always
-  at least 56 tiles wide.
-- The plan is plain JSON, so it can later be shared with a realtime server for multiplayer
-  presence without changing the layout code.
-- The list pages stay as the accessible, indexable version of each floor.
-- A floor can swap its map for a hands-on lab. Floor 7 (`perception`) does: `/floors/perception/walk`
-  renders `<PerceptionLab>` (`src/components/perception/`), four stations where the visitor makes an
-  optical effect happen and then sees how it works. Add a slug to `FLOOR_LABS` to give another floor
-  its own lab. Its floor plan is still built, so `tests/walk.test.ts` keeps checking it.
+- **The plan.** One plan for every floor: wings of rooms west and east of a ring round the
+  atrium, a core with the floor's name on it to the north, a lounge on the street side. The
+  ground floor is the lobby: front doors, information desk, café, store, the Community Gallery
+  and the Studio, and a grand oak stair to Floor 2. Above it, flights zigzag across the atrium
+  from floor to floor and a glass lift rides up its west side. Floor 5 opens onto a sculpture
+  terrace with a living wall; the floors above step back from it. The design takes its spirit
+  from big modern museums (a skylit atrium, a wide stair to sit on, a rippled white façade)
+  without copying any real building.
+- **Rooms.** Exhibitions fill the rooms in walking order (down the west wing, across, up the
+  east). Rooms in a wing open into each other on one axis, so you see through three at once.
+  A floor with fewer exhibitions than rooms gets lounges and reading rooms; adding an exhibition
+  to `floors.ts` fills the next room. A floor with too many throws at build time.
+- **Hanging.** Works go round a room's walls, clear of doorways, spread so no wall is crowded
+  while another is bare, in order from the door. `tests/walk.test.ts` checks every work hangs on
+  its room's wall and can be walked to from the front doors, up the stairs if need be.
+- **Stairs.** A stair belongs to the floor below for its lower half and the floor above for its
+  upper half; halfway up, the visitor changes floor. Routes (`route()`) search every floor's
+  walkable cells joined at the stairs, so a click on a balcony across the atrium walks you
+  there.
+- **Drawing.** Static geometry is merged per material per floor; floors you can't see aren't
+  drawn, and paintings and other visitors only near you. Pictures load for your floor and the
+  floors either side. Exposure adapts: brighter in the galleries, stopped down in the street.
+  The sun follows the time of day, within opening hours.
+- **Controls.** Drag to look; WASD / arrows; click the floor (any floor) to walk there; click a
+  painting to walk up to it; E opens what you're facing; F opens the floor directory; scroll,
+  pinch or V steps the camera back to show your avatar. Phones get a thumb stick. Without WebGL
+  the page links to the floor guides.
+- **Sound** (`components/walk/audio.ts`, Web Audio, no audio files): a generative score in each
+  floor's mood and a lobby mood downstairs (`lib/walk/music.ts`); footsteps on oak, stone,
+  decking or pavement; a long echo in the atrium, a murmur of voices, traffic outside and the
+  car going by; the lift's chime and doors. M or the Sound button mutes it.
+- In development, `window.__walk` holds the walk state, `window.__building` the plan,
+  `window.__audio()` the audio engine and `window.__renderer` the renderer (draw calls), so
+  scripts can move the visitor and check what's drawn.
+- The building is plain JSON, so it can later be shared with a realtime server for multiplayer
+  presence.
+- The floor pages stay as the accessible, indexable version of each floor.
+- A floor can also have a hands-on lab. Floor 7 (`perception`) does: `/floors/perception/walk`
+  renders `<PerceptionLab>` (`src/components/perception/`), and in the building a kiosk in the
+  Perception Lab room leads there. Add a slug to `FLOOR_LABS` to give another floor its own lab.
 
 ## Public-domain collection
 

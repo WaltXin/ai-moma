@@ -133,7 +133,7 @@ export default function LobbyPage() {
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-3 max-md:order-first">
                   {firstHung && (
                     <Link
-                      href={`/floors/${firstHung.slug}/walk`}
+                      href="/walk"
                       className={`${BUTTON} px-6 py-3.5 text-lg`}
                     >
                       Walk in

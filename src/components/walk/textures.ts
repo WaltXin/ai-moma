@@ -74,24 +74,349 @@ export function woodFloor(): HTMLCanvasElement {
   return c;
 }
 
-/** Pale terrazzo laid in 1 m squares, for the corridor and the lift lobby. */
+/** Honed limestone in big slabs, for the lobby: 4 m of floor per tile of texture. */
 export function stoneFloor(): HTMLCanvasElement {
-  const [c, ctx] = canvas(512, 512);
+  const [c, ctx] = canvas(1024, 1024);
   const rand = seededRandom(11);
-  ctx.fillStyle = "#c4bdb2";
+  const slab = 256; // 1 m × 2 m slabs, staggered
+  for (let row = 0; row < 4; row++) {
+    for (let col = -1; col < 3; col++) {
+      const x = col * slab * 2 + (row % 2) * slab;
+      const tone = 0.95 + rand() * 0.06;
+      ctx.fillStyle = `rgb(${Math.round(214 * tone)},${Math.round(207 * tone)},${Math.round(194 * tone)})`;
+      ctx.fillRect(x, row * slab, slab * 2, slab);
+    }
+  }
+  // Fossil flecks and soft clouds in the stone.
+  for (let i = 0; i < 260; i++) {
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    const shade = rand() < 0.5 ? "120,110,96" : "250,246,238";
+    g.addColorStop(0, `rgba(${shade},0.10)`);
+    g.addColorStop(1, `rgba(${shade},0)`);
+    ctx.save();
+    ctx.translate(rand() * 1024, rand() * 1024);
+    ctx.scale(20 + rand() * 70, 8 + rand() * 30);
+    ctx.fillStyle = g;
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
+  }
+  for (let i = 0; i < 3000; i++) {
+    ctx.fillStyle = `rgba(110,100,86,${0.08 + rand() * 0.2})`;
+    ctx.fillRect(rand() * 1024, rand() * 1024, 1 + rand() * 2, 1 + rand() * 1.5);
+  }
+  ctx.fillStyle = "rgba(96,88,78,0.45)";
+  for (let row = 0; row < 4; row++) {
+    ctx.fillRect(0, row * slab, 1024, 2);
+    for (let col = -1; col < 3; col++) ctx.fillRect(col * slab * 2 + (row % 2) * slab, row * slab, 2, slab);
+  }
+  return c;
+}
+
+/** Pale concrete pavers for the sidewalk, 4 m per tile. */
+export function pavement(): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 512);
+  const rand = seededRandom(31);
+  ctx.fillStyle = "#b9b4ab";
   ctx.fillRect(0, 0, 512, 512);
-  const chips = ["#a9a296", "#dcd7cf", "#8d867b", "#b9a990", "#6f6a62"];
-  for (let i = 0; i < 2600; i++) {
-    ctx.fillStyle = chips[Math.floor(rand() * chips.length)];
-    const s = 1 + rand() * 3.2;
+  for (let y = 0; y < 512; y += 128) {
+    for (let x = 0; x < 512; x += 128) {
+      const t = 0.92 + rand() * 0.12;
+      ctx.fillStyle = `rgba(${Math.round(190 * t)},${Math.round(185 * t)},${Math.round(176 * t)},1)`;
+      ctx.fillRect(x + 1, y + 1, 126, 126);
+    }
+  }
+  for (let i = 0; i < 6000; i++) {
+    ctx.fillStyle = rand() < 0.5 ? "rgba(70,66,60,0.12)" : "rgba(255,255,250,0.12)";
+    ctx.fillRect(rand() * 512, rand() * 512, 1.5, 1.5);
+  }
+  // A few stains, so it's been walked on.
+  for (let i = 0; i < 18; i++) {
+    ctx.fillStyle = `rgba(60,56,50,${0.04 + rand() * 0.05})`;
     ctx.beginPath();
-    ctx.ellipse(rand() * 512, rand() * 512, s, s * (0.5 + rand() * 0.6), rand() * 3, 0, 7);
+    ctx.ellipse(rand() * 512, rand() * 512, 6 + rand() * 22, 4 + rand() * 14, rand() * 3, 0, 7);
     ctx.fill();
   }
-  ctx.fillStyle = "rgba(90,84,76,0.35)";
-  for (const p of [0, 256]) {
-    ctx.fillRect(p, 0, 2, 512);
-    ctx.fillRect(0, p, 512, 2);
+  return c;
+}
+
+/** Asphalt with its grain, 4 m per tile. */
+export function asphalt(): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 512);
+  const rand = seededRandom(37);
+  ctx.fillStyle = "#3d3e40";
+  ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 14000; i++) {
+    const v = Math.round(40 + rand() * 50);
+    ctx.fillStyle = `rgba(${v},${v},${v + 2},0.5)`;
+    ctx.fillRect(rand() * 512, rand() * 512, 1.6, 1.6);
+  }
+  for (let i = 0; i < 10; i++) {
+    ctx.strokeStyle = "rgba(20,20,22,0.35)";
+    ctx.lineWidth = 1 + rand() * 2;
+    ctx.beginPath();
+    let x = rand() * 512;
+    let y = rand() * 512;
+    ctx.moveTo(x, y);
+    for (let k = 0; k < 6; k++) {
+      x += (rand() - 0.5) * 60;
+      y += (rand() - 0.5) * 60;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  return c;
+}
+
+/** Weathered hardwood decking for the terrace, 2 m per tile. */
+export function deck(): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 512);
+  const rand = seededRandom(41);
+  const board = 512 / 14;
+  for (let i = 0; i < 14; i++) {
+    const t = 0.9 + rand() * 0.16;
+    ctx.fillStyle = `rgb(${Math.round(150 * t)},${Math.round(128 * t)},${Math.round(104 * t)})`;
+    ctx.fillRect(i * board, 0, board - 3, 512);
+    for (let k = 0; k < 7; k++) {
+      ctx.fillStyle = `rgba(80,62,44,${0.1 + rand() * 0.12})`;
+      ctx.fillRect(i * board + 2 + rand() * (board - 8), 0, 1, 512);
+    }
+  }
+  return c;
+}
+
+/**
+ * The façade's white panels: horizontal ripples, like wind on water, that
+ * catch the light on their upper faces. Shading is painted in, so it reads
+ * outdoors without a sun lamp. 4 m wide by 2 m tall per tile.
+ */
+export function facadeRipples(): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 512);
+  const rand = seededRandom(43);
+  const img = ctx.createImageData(512, 512);
+  const phases = Array.from({ length: 6 }, () => rand() * Math.PI * 2);
+  for (let y = 0; y < 512; y++) {
+    for (let x = 0; x < 512; x++) {
+      // Ripples whose spacing and depth drift across the panel.
+      const u = x / 512;
+      const v = y / 512;
+      const wave =
+        Math.sin(v * Math.PI * 2 * 9 + Math.sin(u * Math.PI * 2 + phases[0]) * 1.6 + phases[1]) *
+          (0.6 + 0.4 * Math.sin(u * Math.PI * 2 * 2 + phases[2])) +
+        0.35 * Math.sin(v * Math.PI * 2 * 23 + Math.sin(u * Math.PI * 4 + phases[3]) * 2);
+      const slope = wave;
+      const shade = 236 + slope * 13;
+      const i = (y * 512 + x) * 4;
+      img.data[i] = shade;
+      img.data[i + 1] = shade - 1;
+      img.data[i + 2] = shade - 4;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // Panel joints.
+  ctx.fillStyle = "rgba(120,118,112,0.5)";
+  ctx.fillRect(0, 0, 512, 2);
+  ctx.fillRect(0, 0, 2, 512);
+  return c;
+}
+
+/** A building's face of windows: glass, mullions, a few lit or with blinds down. */
+export function cityWindows(variant: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(256, 256);
+  const rand = seededRandom(51 + variant * 7);
+  const walls = ["#c9c1b4", "#a7a49e", "#d8d2c6", "#8f8a84", "#b9a58f"];
+  ctx.fillStyle = walls[variant % walls.length];
+  ctx.fillRect(0, 0, 256, 256);
+  const cols = variant % 2 === 0 ? 4 : 3;
+  const rows = 4;
+  const cw = 256 / cols;
+  const rh = 256 / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let k = 0; k < cols; k++) {
+      const x = k * cw + cw * 0.16;
+      const y = r * rh + rh * 0.22;
+      const w = cw * 0.68;
+      const h = rh * 0.56;
+      const g = ctx.createLinearGradient(x, y, x, y + h);
+      const lit = rand() < 0.12;
+      g.addColorStop(0, lit ? "#f3dfae" : "#6f8297");
+      g.addColorStop(1, lit ? "#d9b878" : "#2f3a46");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+      if (rand() < 0.3) {
+        ctx.fillStyle = "rgba(230,226,214,0.85)";
+        ctx.fillRect(x, y, w, h * (0.2 + rand() * 0.6));
+      }
+      ctx.fillStyle = "rgba(30,30,30,0.5)";
+      ctx.fillRect(x + w / 2 - 1, y, 2, h);
+    }
+  }
+  return c;
+}
+
+/** A wall of plants: hundreds of leaves in many greens, 3 m per tile. */
+export function livingWall(): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 512);
+  const rand = seededRandom(61);
+  ctx.fillStyle = "#1f3a22";
+  ctx.fillRect(0, 0, 512, 512);
+  const greens = ["#2f5a2c", "#3f7a37", "#5c8f3c", "#284d2a", "#6fa04a", "#3b6a45", "#86a95a", "#4d7a52"];
+  for (let i = 0; i < 4200; i++) {
+    const x = rand() * 512;
+    const y = rand() * 512;
+    const s = 3 + rand() * 9;
+    ctx.fillStyle = greens[Math.floor(rand() * greens.length)];
+    ctx.beginPath();
+    ctx.ellipse(x, y, s, s * (0.35 + rand() * 0.4), rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+    // Light on the top of each leaf.
+    ctx.fillStyle = "rgba(220,240,180,0.10)";
+    ctx.beginPath();
+    ctx.ellipse(x, y - s * 0.2, s * 0.6, s * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Clumps of flowers.
+  for (let i = 0; i < 60; i++) {
+    ctx.fillStyle = rand() < 0.5 ? "rgba(214,120,150,0.8)" : "rgba(240,220,140,0.8)";
+    const x = rand() * 512;
+    const y = rand() * 512;
+    for (let k = 0; k < 8; k++) ctx.fillRect(x + (rand() - 0.5) * 14, y + (rand() - 0.5) * 14, 2.5, 2.5);
+  }
+  return c;
+}
+
+/** Spines of books on a shelf, for the store and the reading rooms. */
+export function bookSpines(variant: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 128);
+  const rand = seededRandom(71 + variant);
+  ctx.fillStyle = "#2a241f";
+  ctx.fillRect(0, 0, 512, 128);
+  const colors = ["#c8442f", "#1f4e79", "#e5d8b8", "#2f6b4f", "#d9a62e", "#111111", "#f2efe8", "#7a3b5a", "#5b6d7a"];
+  let x = 0;
+  while (x < 512) {
+    const w = 6 + rand() * 14;
+    const h = 80 + rand() * 46;
+    ctx.fillStyle = colors[Math.floor(rand() * colors.length)];
+    ctx.fillRect(x, 128 - h, w - 1, h);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(x + 1, 128 - h + 8, w - 3, 2);
+    x += w;
+  }
+  return c;
+}
+
+/** Lightmap for a floor: dark under walls and furniture, softening away from them. */
+export function floorShade(
+  size: { w: number; h: number },
+  pxPerM: number,
+  solids: { x0: number; z0: number; x1: number; z1: number; dark: number }[],
+  origin: { x: number; z: number },
+): HTMLCanvasElement {
+  const w = Math.max(1, Math.ceil(size.w * pxPerM));
+  const h = Math.max(1, Math.ceil(size.h * pxPerM));
+  const [c, ctx] = canvas(w, h);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  for (const s of solids) {
+    ctx.fillStyle = `rgba(0,0,0,${s.dark})`;
+    ctx.fillRect(
+      (s.x0 - origin.x) * pxPerM,
+      (s.z0 - origin.z) * pxPerM,
+      (s.x1 - s.x0) * pxPerM,
+      (s.z1 - s.z0) * pxPerM,
+    );
+  }
+  // Blur in place: three box passes make a soft falloff.
+  const img = ctx.getImageData(0, 0, w, h);
+  const src = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) src[i] = img.data[i * 4];
+  const tmp = new Float32Array(w * h);
+  const r = Math.max(1, Math.round(pxPerM * 0.35));
+  for (let pass = 0; pass < 3; pass++) {
+    for (let y = 0; y < h; y++) {
+      let acc = 0;
+      for (let x = -r; x <= r; x++) acc += src[y * w + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) {
+        tmp[y * w + x] = acc / (2 * r + 1);
+        acc += src[y * w + Math.min(w - 1, x + r + 1)] - src[y * w + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let y = -r; y <= r; y++) acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        src[y * w + x] = acc / (2 * r + 1);
+        acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+      }
+    }
+  }
+  for (let i = 0; i < w * h; i++) {
+    // Gentle: 255 in the open, never below about 40% against a wall.
+    const v = 100 + (src[i] / 255) * 155;
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Light falling through glass: a bright panel crossed by the mullions' shadows. */
+export function sunThroughGlass(cols: number, transom: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(512, 256);
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, "rgba(255,236,200,0.9)");
+  g.addColorStop(1, "rgba(255,236,200,0.55)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 256);
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.fillStyle = "#000";
+  for (let i = 0; i <= cols; i++) ctx.fillRect((i * 512) / cols - 4, 0, 8, 256);
+  if (transom > 0 && transom < 1) ctx.fillRect(0, transom * 256 - 5, 512, 10);
+  // Soft edges.
+  ctx.globalCompositeOperation = "destination-in";
+  const e = ctx.createLinearGradient(0, 0, 512, 0);
+  e.addColorStop(0, "rgba(0,0,0,0)");
+  e.addColorStop(0.04, "rgba(0,0,0,1)");
+  e.addColorStop(0.96, "rgba(0,0,0,1)");
+  e.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = e;
+  ctx.fillRect(0, 0, 512, 256);
+  return c;
+}
+
+/** A soft vertical shaft of light, for the beam under the oculus. */
+export function lightBeam(): HTMLCanvasElement {
+  const [c, ctx] = canvas(128, 256);
+  const g = ctx.createLinearGradient(0, 0, 128, 0);
+  g.addColorStop(0, "rgba(255,246,226,0)");
+  g.addColorStop(0.5, "rgba(255,246,226,1)");
+  g.addColorStop(1, "rgba(255,246,226,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 256);
+  ctx.globalCompositeOperation = "destination-in";
+  const v = ctx.createLinearGradient(0, 0, 0, 256);
+  v.addColorStop(0, "rgba(0,0,0,0.9)");
+  v.addColorStop(1, "rgba(0,0,0,0.15)");
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, 128, 256);
+  return c;
+}
+
+/** The skyline far off, as a band of silhouettes against the haze. */
+export function skyline(): HTMLCanvasElement {
+  const [c, ctx] = canvas(2048, 256);
+  const rand = seededRandom(83);
+  for (const [base, tone, maxH] of [
+    [256, "rgba(150,162,176,0.55)", 150],
+    [256, "rgba(118,128,142,0.7)", 100],
+  ] as const) {
+    let x = 0;
+    while (x < 2048) {
+      const bw = 14 + rand() * 60;
+      const bh = 20 + rand() * maxH * (rand() < 0.1 ? 1.6 : 1);
+      ctx.fillStyle = tone;
+      ctx.fillRect(x, base - bh, bw, bh);
+      x += bw + rand() * 6;
+    }
   }
   return c;
 }
@@ -119,56 +444,36 @@ export function contactShadow(): HTMLCanvasElement {
   return c;
 }
 
-/** The view from the lounge windows: an evening sky over a low city. */
-export function windowView(widthM: number): HTMLCanvasElement {
-  const w = Math.min(4096, Math.round(widthM * 160));
-  const [c, ctx] = canvas(w, 420);
-  const sky = ctx.createLinearGradient(0, 0, 0, 420);
-  sky.addColorStop(0, "#7fa4c9");
-  sky.addColorStop(0.55, "#c9d6df");
-  sky.addColorStop(0.8, "#f1d9b5");
-  sky.addColorStop(1, "#e9c79c");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, 420);
-  const rand = seededRandom(23);
-  // Two rows of buildings, the far one hazier.
-  for (const [base, tone, maxH] of [
-    [330, "rgba(108,122,140,0.55)", 150],
-    [370, "rgba(70,78,92,0.85)", 120],
-  ] as const) {
-    let x = 0;
-    while (x < w) {
-      const bw = 30 + rand() * 90;
-      const bh = 20 + rand() * maxH;
-      ctx.fillStyle = tone;
-      ctx.fillRect(x, base - bh, bw, 420);
-      x += bw + rand() * 8;
-    }
-  }
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.fillRect(0, 0, w, 420);
-  return c;
-}
-
-/** Large lettering painted on a wall, in the wall's ink. Transparent elsewhere. */
+/**
+ * Large lettering painted on a wall, in the wall's ink. Transparent elsewhere.
+ * The canvas grows to fit the longest line, so nothing is cut short.
+ */
 export function wallLettering(
   lines: { text: string; size: number; weight?: number; font?: "sans" | "display" }[],
   ink: string,
   fonts: Fonts,
-  width = 1024,
+  minWidth = 1024,
 ): { canvas: HTMLCanvasElement; aspect: number } {
   const pad = 8;
   const gap = 0.32;
-  const height = Math.ceil(
-    lines.reduce((h, l, i) => h + l.size * (i ? 1 + gap : 1.05), 0) + pad * 2,
+  const fontOf = (l: (typeof lines)[number]) =>
+    `${l.weight ?? 600} ${l.size}px ${l.font === "display" ? fonts.display : fonts.sans}`;
+  const [, probe] = canvas(1, 1);
+  const widest = Math.max(
+    ...lines.map((l) => {
+      probe.font = fontOf(l);
+      return probe.measureText(l.text).width;
+    }),
   );
+  const width = Math.min(4096, Math.max(minWidth, Math.ceil(widest + pad * 2)));
+  const height = Math.ceil(lines.reduce((h, l, i) => h + l.size * (i ? 1 + gap : 1.05), 0) + pad * 2);
   const [c, ctx] = canvas(width, height);
   ctx.fillStyle = ink;
   ctx.textBaseline = "top";
   let y = pad;
   lines.forEach((l, i) => {
     if (i) y += l.size * gap;
-    ctx.font = `${l.weight ?? 600} ${l.size}px ${l.font === "display" ? fonts.display : fonts.sans}`;
+    ctx.font = fontOf(l);
     ctx.fillText(fit(ctx, l.text, width - pad * 2), pad, y);
     y += l.size;
   });

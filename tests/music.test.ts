@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { seededRandom } from "@/lib/museum/placeholder";
 import { getExhibitionsOnFloor, getFloors, getMovements } from "@/lib/museum/registry";
-import { ROW, buildFloorPlan } from "@/lib/walk/floor-plan";
-import { spawnPose, viewpoint } from "@/lib/walk/motion";
-import { hz, moodFor, nextDegree, noteOf, surfaceAt } from "@/lib/walk/music";
+import { buildBuilding } from "@/lib/walk/building";
+import { startPose, viewpoint } from "@/lib/walk/motion";
+import { acousticsAt, hz, moodAt, moodFor, nextDegree, noteOf, surfaceAt } from "@/lib/walk/music";
 
 describe("floor music", () => {
   it("gives every floor a playable mood, and new floors a default one", () => {
@@ -54,21 +54,32 @@ describe("floor music", () => {
   });
 });
 
-describe("footsteps", () => {
-  it("sound like oak in the rooms and terrazzo in the corridor", () => {
-    const plan = getFloors()
-      .map((floor) =>
-        buildFloorPlan({
-          floor,
-          exhibitions: getExhibitionsOnFloor(floor),
-          movements: getMovements(),
-          floors: getFloors(),
-        }),
-      )
-      .find((p) => p.artworks.length > 0)!;
-    expect(surfaceAt(plan, spawnPose(plan).at)).toBe("stone");
-    const inRoom = viewpoint(plan, { kind: "art", art: plan.artworks[0] }).at;
-    expect(surfaceAt(plan, inRoom)).toBe("wood");
-    expect(surfaceAt(plan, { x: plan.lounge.x + 2, z: ROW.roomTop + 1 })).toBe("wood");
+describe("the sound of the building", () => {
+  const b = buildBuilding({ floors: getFloors(), exhibitionsOn: getExhibitionsOnFloor, movements: getMovements() });
+  const lobby = { level: 0, pos: startPose(b).pos };
+  const art = b.artworks[0];
+  const gallery = { level: art.level, pos: viewpoint(b, { kind: "art", art }).at };
+  const street = { level: 0, pos: { x: 24, z: 46 } };
+  const terraceSpace = b.levels.flatMap((l) => l.spaces.map((s) => ({ l, s }))).find(({ s }) => s.kind === "terrace")!;
+  const terrace = { level: terraceSpace.l.index, pos: { x: terraceSpace.s.rect.x0 + 3, z: 18 } };
+
+  it("puts stone underfoot in the lobby, oak in the galleries, decking on the terrace, pavement outside", () => {
+    expect(surfaceAt(b, lobby)).toBe("stone");
+    expect(surfaceAt(b, gallery)).toBe("wood");
+    expect(surfaceAt(b, terrace)).toBe("deck");
+    expect(surfaceAt(b, street)).toBe("street");
+  });
+
+  it("plays the lobby's music downstairs and each floor's own up in the galleries", () => {
+    expect(moodAt(b, lobby)).toBe(moodAt(b, street));
+    expect(moodAt(b, gallery)).toBe(moodFor(b.levels[art.level].slug));
+    expect(moodAt(b, gallery)).not.toBe(moodAt(b, lobby));
+  });
+
+  it("echoes in the halls, not in the street", () => {
+    expect(acousticsAt(b, lobby)).toBe("hall");
+    expect(acousticsAt(b, gallery)).toBe("room");
+    expect(acousticsAt(b, street)).toBe("outside");
+    expect(acousticsAt(b, terrace)).toBe("outside");
   });
 });
