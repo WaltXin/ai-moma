@@ -18,15 +18,15 @@ export const exhibitions: Exhibition[] = [
     title: "Impressions of Light",
     movement: "impressionism",
     description:
-      "Haystacks at sunset, a wet Paris boulevard, a milliner's shop: modern life caught in passing light.",
+      "Haystacks at sunset, a wet Paris boulevard, a ballet class: modern life caught in passing light.",
     curator: "AI MoMA",
     kind: "curated",
     artworks: [
       pd("aic", 64818), // Monet, Stacks of Wheat (End of Summer)
-      pd("aic", 16568), // Monet, Water Lilies
+      pd("nga", 61379), // Monet, Woman with a Parasol - Madame Monet and Her Son
       pd("aic", 20684), // Caillebotte, Paris Street; Rainy Day
       pd("aic", 14655), // Renoir, Two Sisters (On the Terrace)
-      pd("aic", 14572), // Degas, The Millinery Shop
+      pd("met", 438817), // Degas, The Dance Class
       pd("aic", 11723), // Morisot, Woman at Her Toilette
       pd("aic", 111442), // Cassatt, The Child's Bath
       pd("aic", 81551), // Pissarro, The Place du Havre, Paris
@@ -42,7 +42,7 @@ export const exhibitions: Exhibition[] = [
     kind: "curated",
     artworks: [
       pd("aic", 27992), // Seurat, A Sunday on La Grande Jatte — 1884
-      pd("aic", 20199), // Seurat, Final Study for "Bathers at Asnières"
+      pd("met", 437654), // Seurat, Circus Sideshow (Parade de cirque)
       pd("aic", 122130), // Signac, Les Andelys, Côte d'Aval
       pd("aic", 100476), // Cross, Beach at Cabasson
       pd("aic", 104912), // Signac, Chromatic Circle
@@ -59,10 +59,10 @@ export const exhibitions: Exhibition[] = [
     kind: "curated",
     artworks: [
       pd("aic", 28560), // van Gogh, The Bedroom
-      pd("aic", 80607), // van Gogh, Self-Portrait
+      pd("nga", 106382), // van Gogh, Self-Portrait (1889)
       pd("aic", 111436), // Cézanne, The Basket of Apples
-      pd("aic", 16487), // Cézanne, The Bay of Marseille
-      pd("aic", 19339), // Gauguin, Arlésiennes (Mistral)
+      pd("met", 435868), // Cézanne, The Card Players
+      pd("met", 436535), // van Gogh, Wheat Field with Cypresses
       pd("aic", 27943), // Gauguin, Mahana no atua
       pd("aic", 61128), // Toulouse-Lautrec, At the Moulin Rouge
     ],
@@ -122,12 +122,12 @@ export const exhibitions: Exhibition[] = [
     title: "Many Angles at Once",
     movement: "cubism",
     description:
-      "Still lifes and cafés taken apart and rebuilt from every side by the Cubists of Paris.",
+      "Still lifes, portraits and a pulp novel taken apart and rebuilt from every side by the Cubists of Paris.",
     curator: "AI MoMA",
     kind: "curated",
     artworks: [
       pd("cma", 715339), // Blanchard, Still Life
-      pd("cma", 164630), // Marcoussis, Night Café
+      pd("nga", 56101), // Gris, Fantômas
       pd("cma", 142692), // Gris, Marcelle la Blonde
       studio("many-angles-1", "Guitar, Four Viewpoints", "cubist"),
     ],

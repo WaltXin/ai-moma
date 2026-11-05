@@ -51,7 +51,10 @@ Rough order. Each item is a good first PR area.
 - [x] 17 movements from Impressionism to Op Art, with public-domain works where they exist
 - [x] At least 4 works per room: code-drawn Studio pieces where works are still in copyright
 - [ ] Replace code-drawn Studio pieces with benchmarked AI generations
-- [ ] Public-domain images for Suprematism & Constructivism and Futurism (few in our sources yet)
+- [x] Two more open-access sources: The Met (`met`) and the National Gallery of Art (`nga`)
+- [ ] Public-domain images for Suprematism & Constructivism and Futurism (none famous yet in
+      AIC, CMA, the Met or NGA; try the Rijksmuseum or Smithsonian Open Access)
+- [ ] Deep zoom: serve NGA and Met originals as IIIF tiles instead of a 3000 px copy
 - [ ] More movements: Fluxus, Conceptual Art, Land Art, … See
       [MOMA_CATALOG.md](MOMA_CATALOG.md) for every movement, form and technique MoMA collects,
       with what's still open

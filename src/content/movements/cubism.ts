@@ -34,7 +34,7 @@ export const cubism: Movement = {
     {
       heading: "What hangs here",
       body: [
-        "Picasso and Braque died in 1973 and 1963, so their work is still under copyright in much of the world. This room shows public-domain work by Juan Gris, María Blanchard and Louis Marcoussis, who all worked in Paris alongside them.",
+        "Picasso and Braque died in 1973 and 1963, so their work is still under copyright in much of the world. This room shows public-domain work by Juan Gris and María Blanchard, who both worked in Paris alongside them.",
       ],
     },
   ],

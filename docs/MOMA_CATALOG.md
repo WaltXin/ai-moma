@@ -18,7 +18,7 @@ pick something and build it. Nothing here is implemented unless it is marked ✅
 
 > **Copyright.** MoMA's data is CC0, but its **images are not**. Never download anything
 > from the dataset's `ImageURL` column. Historic works still come in only through
-> `pd("aic" | "cma", id)` and `pnpm art:fetch`. For anything still in copyright, hang an
+> `pd("aic" | "cma" | "met" | "nga", id)` and `pnpm art:fetch`. For anything still in copyright, hang an
 > original Studio piece made with the movement's techniques (see `AGENTS.md`). The
 > "Public domain?" column below is only a rough guide; `art:fetch` makes the final call.
 
