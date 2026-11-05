@@ -37,10 +37,11 @@ No API keys are needed. The `mock` provider works offline.
    website. The number in its URL is its id.
 2. Add `pd("aic", <id>)` or `pd("cma", <id>)` to an exhibition's `artworks` in
    `src/content/exhibitions.ts`.
-3. Run `pnpm art:fetch`. It downloads the image to `public/art/`, records the title, artist,
-   date, medium and credit line, and refuses the work unless it is public domain and the artist
-   died more than 70 years ago.
-4. Commit the image and `collection.generated.ts` with your change.
+3. Run `pnpm art:fetch`. It downloads the image to `public/art/` and a large copy (up to
+   3000 px) to `public/art/zoom/` for looking closely, records the title, artist, date, medium
+   and credit line, and refuses the work unless it is public domain and the artist died more
+   than 70 years ago.
+4. Commit both images and `collection.generated.ts` with your change.
 
 ## Draw a Studio piece with code
 

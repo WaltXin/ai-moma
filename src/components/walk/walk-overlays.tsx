@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Agamograph } from "@/components/agamograph";
 import { ArtworkPlaceholder } from "@/components/artwork-frame";
 import { Arrow, BUTTON, TEXT_LINK } from "@/components/gallery/wall-parts";
+import { type ScreenRect, ZoomImage, type ZoomImageHandle } from "@/components/zoom-image";
 import type { Building, PlanArtwork, PlanRoom, Portal } from "@/lib/walk/building";
 
 /** A floor as the lift and the directory list it. */
@@ -68,159 +69,203 @@ function Dialog({
   );
 }
 
+/**
+ * Up close to a work, as you'd step up to it in a gallery: the picture fills
+ * the screen (growing out of its place on the wall) and you can zoom right
+ * into it; the label sits beside it, or under it on a phone.
+ */
 export function ArtworkViewer({
   art,
   room,
   siblings,
+  from,
+  rectOf,
+  exitRef,
   onNavigate,
   onClose,
 }: {
   art: PlanArtwork;
   room: PlanRoom;
   siblings: PlanArtwork[];
+  /** Where the work hangs on screen, to grow it from there. */
+  from?: ScreenRect | null;
+  /** Where a work hangs on screen now, to shrink it back on the way out. */
+  rectOf?: (id: string) => ScreenRect | null;
+  /** Filled with the animated close, for the floor's Escape key. */
+  exitRef?: React.RefObject<(() => void) | null>;
   onNavigate: (art: PlanArtwork) => void;
   onClose: () => void;
 }) {
   const titleId = useId();
+  const panel = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<ZoomImageHandle>(null);
+  const [leaving, setLeaving] = useState(false);
   const i = siblings.findIndex((a) => a.id === art.id);
   const prev = siblings[(i - 1 + siblings.length) % siblings.length];
   const next = siblings[(i + 1) % siblings.length];
+  // Fly in only from the work you clicked, not when stepping along the wall.
+  const [first] = useState(art.id);
+  const flyFrom = art.id === first ? from : null;
+
+  const leave = useCallback(() => {
+    if (leaving) return;
+    setLeaving(true);
+    const z = zoomRef.current;
+    if (!z) return onClose();
+    z.leave(rectOf?.(art.id) ?? null, onClose);
+  }, [leaving, onClose, rectOf, art.id]);
+
+  useEffect(() => {
+    if (!exitRef) return;
+    exitRef.current = leave;
+    return () => {
+      exitRef.current = null;
+    };
+  }, [exitRef, leave]);
+
+  useEffect(() => {
+    panel.current?.focus({ preventScroll: true });
+  }, []);
+
+  const alt = `${art.title} by ${art.artist}`;
 
   return (
-    <Dialog labelledBy={titleId} onClose={onClose} wide>
-      <div className="grid gap-8 lg:grid-cols-[1fr_19rem] lg:gap-10">
-        <div className="flex min-h-[40vh] items-center justify-center p-[clamp(4px,0.62vw,10px)]">
-          {art.frames ? (
-            <div
-              key={art.id}
-              className="w-full"
-              style={{
-                maxWidth: `min(100%, calc(62vh * ${art.frames[0].width / art.frames[0].height}))`,
-              }}
-            >
-              <Agamograph
-                frames={art.frames}
-                alt={art.title}
-                imageClassName="frame frame-black"
-                className="[&_.frame]:mb-[var(--fw)]"
-              />
-            </div>
-          ) : art.image ? (
-            // Local public-domain files and Studio SVGs; a plain <img> keeps natural sizing.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={art.id}
-              src={art.image.src}
-              width={art.image.width}
-              height={art.image.height}
-              alt={`${art.title} by ${art.artist}`}
-              className={`frame frame-${art.frame} max-h-[68vh] w-auto max-w-full`}
-            />
-          ) : (
-            <div className="frame frame-black aspect-square w-full max-w-md">
-              <ArtworkPlaceholder
-                id={art.id}
-                palette={room.movement.palette}
-                pattern={room.movement.pattern}
-              />
-            </div>
-          )}
-        </div>
+    <div
+      ref={panel}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col overflow-y-auto overscroll-contain outline-none lg:flex-row lg:overflow-hidden"
+    >
+      <div
+        aria-hidden
+        className={`absolute inset-0 bg-[#121110] transition-opacity ease-out ${leaving ? "opacity-0 duration-400" : "animate-[fade-in_500ms_ease-out_both]"}`}
+      />
 
-        <div className="flex flex-col pr-8 lg:pr-0 lg:pt-12">
-          <div className="text-[0.9375rem] leading-snug">
-            <p className="font-semibold">{art.artist}</p>
-            <h2 id={titleId} className="mt-0.5">
-              <span className="italic">{art.title}</span>, {art.date}
-            </h2>
-            <p className="mt-3 text-muted">{art.medium}</p>
-
-            {art.credit && (
-              <p className="mt-3 text-sm text-muted">
-                {art.credit.line && <span className="block">{art.credit.line}</span>}
-                <a
-                  href={art.credit.url}
-                  className="mt-1 inline-block text-ink underline underline-offset-4 hover:decoration-2"
-                >
-                  {art.credit.institution}
-                </a>{" "}
-                · Public domain (CC0)
-              </p>
-            )}
-            {art.generative && (
-              <p className="mt-3 text-sm text-muted">
-                Drawn in code by the Studio with {room.movement.name} techniques. Not a copy of any
-                existing work.
-                {art.frames &&
-                  " Move your pointer across it, drag on a touch screen, or use the slider to change the view."}
-              </p>
-            )}
-            {art.generation && (
-              <p className="mt-3 text-sm text-muted">
-                Made with {art.generation.provider}
-                {art.generation.model ? ` (${art.generation.model})` : ""}
-              </p>
-            )}
-            {!art.image && (
-              <p className="mt-3 text-sm text-muted">
-                This frame is waiting for a Studio piece made with {room.movement.name} techniques.{" "}
-                <Link href={`/learn/${room.movement.slug}`} className="text-ink underline">
-                  Learn the techniques
-                </Link>
-                {room.movement.studioOpen && (
-                  <>
-                    {" "}
-                    or{" "}
-                    <Link
-                      href={`/studio?movement=${room.movement.slug}`}
-                      className="text-ink underline"
-                    >
-                      make one
-                    </Link>
-                  </>
-                )}
-                .
-              </p>
+      <div className="relative h-[62svh] shrink-0 lg:h-auto lg:min-w-0 lg:flex-1">
+        {art.image && !art.frames ? (
+          <ZoomImage key={art.id} ref={zoomRef} image={art.image} zoom={art.zoom} alt={alt} from={flyFrom} />
+        ) : (
+          <div key={art.id} className="absolute inset-0 flex animate-[fade-in_300ms_ease-out_both] items-center justify-center p-6 sm:p-10">
+            {art.frames ? (
+              <div
+                className="w-full"
+                style={{ maxWidth: `min(100%, calc(56svh * ${art.frames[0].width / art.frames[0].height}))` }}
+              >
+                <Agamograph
+                  frames={art.frames}
+                  alt={art.title}
+                  imageClassName="frame frame-black"
+                  className="[&_.frame]:mb-[var(--fw)]"
+                />
+              </div>
+            ) : (
+              <div className="frame frame-black aspect-square w-full max-w-md">
+                <ArtworkPlaceholder id={art.id} palette={room.movement.palette} pattern={room.movement.pattern} />
+              </div>
             )}
           </div>
+        )}
+      </div>
 
-          <p className="mt-6 border-t border-line pt-4 text-sm text-muted">
-            In{" "}
-            <Link
-              href={`/exhibitions/${room.slug}`}
-              className="text-ink underline-offset-4 hover:underline"
-            >
-              {room.title}
-            </Link>{" "}
-            · {room.movement.name}
-          </p>
+      <aside
+        className={`relative flex shrink-0 flex-col bg-wall p-6 text-ink transition-[translate,opacity] duration-500 ease-out sm:p-8 lg:w-[23rem] lg:overflow-y-auto lg:pt-16 ${
+          leaving ? "translate-y-4 opacity-0 lg:translate-x-8 lg:translate-y-0" : "animate-[panel-up_520ms_cubic-bezier(0.2,0.7,0.1,1)_both] lg:animate-[panel-side_520ms_cubic-bezier(0.2,0.7,0.1,1)_both]"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={leave}
+          aria-label="Close"
+          className="absolute top-3 right-3 grid size-10 place-items-center rounded-full transition-colors hover:bg-ink hover:text-wall"
+        >
+          <svg aria-hidden viewBox="0 0 14 14" className="size-3.5" stroke="currentColor" strokeWidth="1.75">
+            <path d="M1 1l12 12M13 1L1 13" />
+          </svg>
+        </button>
 
-          {siblings.length > 1 && (
-            <div className="mt-auto flex items-center justify-between gap-3 pt-8">
-              <button
-                type="button"
-                onClick={() => onNavigate(prev)}
-                className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
-              >
-                <Arrow direction="left" />
-                Previous
-              </button>
-              <span className="text-sm text-muted tabular-nums">
-                {i + 1} of {siblings.length}
-              </span>
-              <button
-                type="button"
-                onClick={() => onNavigate(next)}
-                className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
-              >
-                Next
-                <Arrow />
-              </button>
-            </div>
+        <div className="pr-8 text-[0.9375rem] leading-snug">
+          <p className="font-semibold">{art.artist}</p>
+          <h2 id={titleId} className="mt-0.5">
+            <span className="italic">{art.title}</span>, {art.date}
+          </h2>
+          <p className="mt-3 text-muted">{art.medium}</p>
+
+          {art.credit && (
+            <p className="mt-3 text-sm text-muted">
+              {art.credit.line && <span className="block">{art.credit.line}</span>}
+              <a href={art.credit.url} className="mt-1 inline-block text-ink underline underline-offset-4 hover:decoration-2">
+                {art.credit.institution}
+              </a>{" "}
+              · Public domain (CC0)
+            </p>
+          )}
+          {art.generative && (
+            <p className="mt-3 text-sm text-muted">
+              Drawn in code by the Studio with {room.movement.name} techniques. Not a copy of any existing work.
+              {art.frames && " Move your pointer across it, drag on a touch screen, or use the slider to change the view."}
+            </p>
+          )}
+          {art.generation && (
+            <p className="mt-3 text-sm text-muted">
+              Made with {art.generation.provider}
+              {art.generation.model ? ` (${art.generation.model})` : ""}
+            </p>
+          )}
+          {!art.image && (
+            <p className="mt-3 text-sm text-muted">
+              This frame is waiting for a Studio piece made with {room.movement.name} techniques.{" "}
+              <Link href={`/learn/${room.movement.slug}`} className="text-ink underline">
+                Learn the techniques
+              </Link>
+              {room.movement.studioOpen && (
+                <>
+                  {" "}
+                  or{" "}
+                  <Link href={`/studio?movement=${room.movement.slug}`} className="text-ink underline">
+                    make one
+                  </Link>
+                </>
+              )}
+              .
+            </p>
           )}
         </div>
-      </div>
-    </Dialog>
+
+        <p className="mt-6 border-t border-line pt-4 text-sm text-muted">
+          In{" "}
+          <Link href={`/exhibitions/${room.slug}`} className="text-ink underline-offset-4 hover:underline">
+            {room.title}
+          </Link>{" "}
+          · {room.movement.name}
+        </p>
+
+        {siblings.length > 1 && (
+          <div className="mt-auto flex items-center justify-between gap-3 pt-8">
+            <button
+              type="button"
+              onClick={() => onNavigate(prev)}
+              className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
+            >
+              <Arrow direction="left" />
+              Previous
+            </button>
+            <span className="text-sm text-muted tabular-nums">
+              {i + 1} of {siblings.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => onNavigate(next)}
+              className="inline-flex items-center gap-2 font-semibold underline-offset-4 hover:underline"
+            >
+              Next
+              <Arrow />
+            </button>
+          </div>
+        )}
+      </aside>
+    </div>
   );
 }
 

@@ -159,6 +159,8 @@ export type PlanArtwork = {
   medium: string;
   /** The image, or the first view of a lenticular piece. */
   image?: ImageFile;
+  /** A large copy to zoom into, brushstroke by brushstroke. */
+  zoom?: ImageFile;
   /** Every view of a lenticular piece (Agamograph), left to right. */
   frames?: ImageFile[];
   credit?: ArtworkCredit;
@@ -596,6 +598,7 @@ export function buildBuilding(input: {
             date: artwork.dateLabel ?? String(artwork.year),
             medium: artwork.medium,
             image: imageOf(artwork),
+            zoom: zoomOf(artwork),
             frames:
               artwork.source.kind === "lenticular"
                 ? artwork.source.frames.map((f) => ({ src: f.src, width: f.width, height: f.height }))
@@ -1106,6 +1109,15 @@ export function spaceAt(level: Level, p: Vec): Space | null {
     if (!best || order.indexOf(s.kind) < order.indexOf(best.kind)) best = s;
   }
   return best;
+}
+
+/** The large copy, or for a Studio piece its own SVG, which is sharp at any size. */
+function zoomOf(artwork: Artwork): ImageFile | undefined {
+  const s = artwork.source;
+  if (s.kind !== "image") return undefined;
+  if (s.zoom) return { src: s.zoom.src, width: s.zoom.width, height: s.zoom.height };
+  if (s.src.endsWith(".svg")) return { src: s.src, width: s.width, height: s.height };
+  return undefined;
 }
 
 function imageOf(artwork: Artwork): ImageFile | undefined {

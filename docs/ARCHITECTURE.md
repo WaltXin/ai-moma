@@ -72,7 +72,13 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
   The sun follows the time of day, within opening hours.
 - **Controls.** Drag to look; WASD / arrows; click the floor (any floor) to walk there; click a
   painting to walk up to it; E opens what you're facing; F opens the floor directory; scroll,
-  pinch or V steps the camera back to show your avatar. Phones get a thumb stick. Without WebGL
+  pinch or V steps the camera back to show your avatar.
+- **Up close.** Opening a painting (E, or clicking it once you're in front of it) grows it out
+  of its place on the wall into a full-screen viewer (`components/zoom-image.tsx`) with its
+  label beside it: scroll, pinch or double-click to zoom right into the large copy, drag to look
+  around, ← → for the next work on the wall; Escape shrinks it back onto the wall
+  (`scene.artRect()` says where it hangs on screen). Studio pieces zoom from their own SVG.
+  Standing in front of a painting also swaps its texture in the walk for the large copy. Phones get a thumb stick. Without WebGL
   the page links to the floor guides.
 - **Sound** (`components/walk/audio.ts`, Web Audio, no audio files): a generative score in each
   floor's mood and a lobby mood downstairs (`lib/walk/music.ts`); footsteps on oak, stone,
@@ -93,14 +99,17 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
 Historic works come from museum open-access APIs, never from scraping:
 
 ```
-exhibitions.ts: pd("aic", 27992) ──▶ pnpm art:fetch ──▶ public/art/aic-27992.jpg
+exhibitions.ts: pd("aic", 27992) ──▶ pnpm art:fetch ──▶ public/art/aic-27992.jpg       (843 px, the wall)
+                                        │                 public/art/zoom/aic-27992.jpg  (≤ 3000 px, up close)
                                         │                 src/content/collection.generated.ts
                                         └─ refuses unless the museum marks it CC0/public domain
                                            AND every artist died > 70 years ago
 ```
 
 `pd()` throws if a work hasn't been fetched, and `validateMuseum()` requires a credit on every
-collection image. Sources: Art Institute of Chicago (`aic`) and Cleveland Museum of Art (`cma`).
+collection image. The zoom copy is the largest the museum serves to anyone (AIC's IIIF server
+stops at 3000 px; CMA's "print" image), re-encoded with `sharp` to about a megabyte. Works whose
+museum has nothing much bigger than the wall image get no zoom copy. Sources: Art Institute of Chicago (`aic`) and Cleveland Museum of Art (`cma`).
 
 ## Rendering
 

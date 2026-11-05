@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   getExhibitions,
@@ -7,6 +9,7 @@ import {
 } from "@/lib/museum/registry";
 import type { Exhibition, Floor, Movement } from "@/lib/museum/types";
 import { movements } from "@/content/movements";
+import { collection } from "@/content/collection.generated";
 
 describe("museum content", () => {
   it("is internally consistent", () => {
@@ -27,6 +30,19 @@ describe("museum content", () => {
   it("hangs at least four works in every curated room", () => {
     for (const e of getExhibitions().filter((x) => x.kind === "curated")) {
       expect(e.artworks.length, e.slug).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("keeps every collection image, and a larger copy to zoom into, on disk", () => {
+    for (const [key, work] of Object.entries(collection)) {
+      const s = work.source;
+      if (s.kind !== "image") continue;
+      expect(existsSync(path.join("public", s.src)), key).toBe(true);
+      if (!s.zoom) continue;
+      expect(existsSync(path.join("public", s.zoom.src)), key).toBe(true);
+      expect(s.zoom.width, key).toBeGreaterThan(s.width);
+      // Same picture: the large copy keeps the wall image's proportions.
+      expect(s.zoom.width / s.zoom.height, key).toBeCloseTo(s.width / s.height, 1);
     }
   });
 

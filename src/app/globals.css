@@ -195,3 +195,22 @@ body:has([data-walls][data-live]) {
     scrollbar-color: var(--line) transparent;
   }
 }
+
+/* The art viewer in the walk: the backdrop darkens, the label slides in beside the picture. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes panel-up {
+  from {
+    opacity: 0;
+    translate: 0 1rem;
+  }
+}
+@keyframes panel-side {
+  from {
+    opacity: 0;
+    translate: 2.5rem 0;
+  }
+}
