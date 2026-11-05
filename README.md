@@ -118,7 +118,9 @@ docs/                     Architecture and roadmap
 
 Anyone can add a movement, an exhibition, a model adapter or a viewer. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md). The most common contribution is a new art movement: one
-file in `src/content/movements/` plus a floor entry.
+file in `src/content/movements/` plus a floor entry. Looking for something to build?
+[docs/MOMA_CATALOG.md](docs/MOMA_CATALOG.md) lists every movement, form and technique MoMA
+collects, and marks which ones are still open.
 
 - 💬 Questions and ideas → [Discussions](https://github.com/WaltXin/ai-moma/discussions)
 - 🐛 Bugs, features, new movements → [issue templates](https://github.com/WaltXin/ai-moma/issues/new/choose)
