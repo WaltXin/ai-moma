@@ -5,7 +5,7 @@ import type { Artwork, Movement, PlaceholderPattern } from "@/lib/museum/types";
 /**
  * Generative stand-in drawn from a movement's palette and pattern.
  * Used until an artwork has a real image. The walkable floor draws the same
- * patterns on canvas (`components/walk/draw.ts`).
+ * patterns on canvas (`components/walk/textures.ts`).
  */
 export function ArtworkPlaceholder({
   id,

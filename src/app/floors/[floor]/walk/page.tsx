@@ -74,10 +74,12 @@ async function WalkWalls({ params }: { params: PageProps<"/floors/[floor]/walk">
               </div>
               <Elevator floors={floors} current={floor.slug} walk row />
             </header>
+          </div>
 
-            {/* Remount per floor so the visitor starts at the elevator. */}
-            <WalkableFloor key={plan.floor.slug} plan={plan} wall={wall} />
+          {/* Edge to edge, filling the window under the header. Remount per floor so the visitor starts at the elevator. */}
+          <WalkableFloor key={plan.floor.slug} plan={plan} wall={wall} />
 
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <p className="mt-6 text-muted">
               Prefer reading?{" "}
               <Link href={`/floors/${floor.slug}`} className={`${TEXT_LINK} text-ink`}>
