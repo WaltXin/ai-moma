@@ -1,8 +1,9 @@
 import { exhibitions as allExhibitions } from "@/content/exhibitions";
 import { floors as allFloors } from "@/content/floors";
 import { movements as allMovements } from "@/content/movements";
+import { worlds as allWorlds } from "@/content/worlds";
 import { RECIPES } from "@/lib/studio-art";
-import type { Artwork, Exhibition, Floor, Movement } from "./types";
+import type { Artwork, Exhibition, Floor, Movement, PaintingWorld } from "./types";
 
 /**
  * Read-only access to museum content. Pages go through these helpers
@@ -67,6 +68,20 @@ export function getStudioArtworks(): Artwork[] {
   return allExhibitions.flatMap((e) => e.artworks.filter((a) => a.recipe));
 }
 
+/** Paintings you can step into. */
+export function getWorlds(): PaintingWorld[] {
+  return allWorlds;
+}
+
+export function getWorld(slug: string): PaintingWorld | undefined {
+  return allWorlds.find((w) => w.slug === slug);
+}
+
+/** The worlds you can step into from a room. */
+export function getWorldsForRoom(slug: string): PaintingWorld[] {
+  return allWorlds.filter((w) => w.room === slug);
+}
+
 export function getFloorForExhibition(slug: string): Floor | undefined {
   return allFloors.find((f) => f.exhibitions.includes(slug));
 }
@@ -82,6 +97,7 @@ export function validateMuseum(
   movements: Movement[] = allMovements,
   exhibitions: Exhibition[] = allExhibitions,
   floors: Floor[] = allFloors,
+  worlds: PaintingWorld[] = allWorlds,
 ): string[] {
   const problems: string[] = [];
 
@@ -117,6 +133,7 @@ export function validateMuseum(
     ...movements.map((m) => m.slug),
     ...exhibitions.map((e) => e.slug),
     ...floors.map((f) => f.slug),
+    ...worlds.map((w) => w.slug),
   ]) {
     if (!SLUG_RE.test(slug)) problems.push(`Invalid slug "${slug}" (use kebab-case)`);
   }
@@ -153,6 +170,17 @@ export function validateMuseum(
         problems.push(`Artwork "${a.id}" uses unknown recipe "${a.recipe.name}"`);
       }
     }
+  }
+
+  dupes(
+    "world slug",
+    worlds.map((w) => w.slug),
+  );
+  for (const w of worlds) {
+    if (!movementSlugs.has(w.movement))
+      problems.push(`World "${w.slug}" references unknown movement "${w.movement}"`);
+    if (!exhibitionSlugs.has(w.room))
+      problems.push(`World "${w.slug}" references unknown room "${w.room}"`);
   }
 
   for (const m of movements) {

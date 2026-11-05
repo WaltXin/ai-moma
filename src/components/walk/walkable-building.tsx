@@ -29,6 +29,7 @@ import {
 import { STEP, acousticsAt, moodAt, surfaceAt } from "@/lib/walk/music";
 import { getAudio, hasEntered, markEntered, soundPreferred, startAudio } from "./audio";
 import type { MuseumScene } from "./scene";
+import { Stick } from "./stick";
 import { ArtworkViewer, Directory, ElevatorPanel, PortalPanel, RoomInfo } from "./walk-overlays";
 
 /**
@@ -65,7 +66,17 @@ const stepZoom = (from: number, to: number) => {
 };
 
 const INTERACT_KEYS = new Set(["e", "Enter", " "]);
-const MOVE_KEYS = new Set(["w", "a", "s", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Shift"]);
+const MOVE_KEYS = new Set([
+  "w",
+  "a",
+  "s",
+  "d",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Shift",
+]);
 
 const angleDiff = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const approach = (a: number, b: number, step: number) => {
@@ -74,7 +85,8 @@ const approach = (a: number, b: number, step: number) => {
 };
 const keyOf = (e: KeyboardEvent) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
 const smooth = (t: number) => t * t * (3 - 2 * t);
-const span = (t: number, from: number, to: number) => smooth(Math.max(0, Math.min(1, (t - from) / (to - from))));
+const span = (t: number, from: number, to: number) =>
+  smooth(Math.max(0, Math.min(1, (t - from) / (to - from))));
 
 type Mode = "loading" | "ready" | "unsupported";
 /** Waiting for "Enter", the first look round the lobby, stepping out of the lift, walking, riding the lift. */
@@ -84,14 +96,32 @@ export type Start = { kind: "lobby" } | { kind: "lift"; level: number };
 /** Into the lobby: a few steps in, and a long look up the atrium to the oculus. */
 const INTRO = { walkTo: 6.5, lookFrom: 1.2, lookUp: 3.6, hold: 5, lookDown: 7.2, end: 7.6 };
 /** Out of the lift on arrival: chime, doors, step out, look round. */
-const ARRIVAL = { chime: 0.25, doors: 0.9, walkFrom: 1.5, walkTo: 4.6, turnFrom: 2.8, turnTo: 5, end: 5.4 };
+const ARRIVAL = {
+  chime: 0.25,
+  doors: 0.9,
+  walkFrom: 1.5,
+  walkTo: 4.6,
+  turnFrom: 2.8,
+  turnTo: 5,
+  end: 5.4,
+};
 
 type Ride = { from: number; to: number; from0: Vec; travel: number };
 /** The ride's timetable, in seconds, given how long the car takes to travel. */
 const rideTimes = (travel: number) => {
   const move = 2.7;
   const arrive = move + travel;
-  return { walkIn: 1.3, turnIn: 1.6, close: 1.7, move, arrive, open: arrive + 0.1, turnOut: arrive + 0.6, walkOut: arrive + 0.9, end: arrive + 3 };
+  return {
+    walkIn: 1.3,
+    turnIn: 1.6,
+    close: 1.7,
+    move,
+    arrive,
+    open: arrive + 0.1,
+    turnOut: arrive + 0.6,
+    walkOut: arrive + 0.9,
+    end: arrive + 3,
+  };
 };
 
 /** Neutral plaques in the public spaces; each floor's own colours in its galleries. */
@@ -116,7 +146,9 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
   const [touch, setTouch] = useState(false);
   const [canFullscreen, setCanFullscreen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [phase, setPhase] = useState<Phase>(() => (hasEntered() ? (start.kind === "lobby" ? "intro" : "arriving") : "waiting"));
+  const [phase, setPhase] = useState<Phase>(() =>
+    hasEntered() ? (start.kind === "lobby" ? "intro" : "arriving") : "waiting",
+  );
   const [sound, setSound] = useState(true);
   const [hasAudio, setHasAudio] = useState(false);
   const [wall, setWall] = useState<Wall>(NEUTRAL);
@@ -195,18 +227,21 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
     return { left: c.left + r.left, top: c.top + r.top, width: r.width, height: r.height };
   }, []);
 
-  const open = useCallback((f: Focus | { kind: "directory" } | null) => {
-    if (!f) return;
-    const g = game.current!;
-    if (f.kind === "art" && g.overlay?.kind !== "art") setArtFrom(rectOf(f.art.id));
-    g.keys.clear();
-    g.stick = { x: 0, y: 0 };
-    g.legs = [];
-    g.goal = null;
-    g.pending = null;
-    g.overlay = f;
-    setOverlay(f);
-  }, [rectOf]);
+  const open = useCallback(
+    (f: Focus | { kind: "directory" } | null) => {
+      if (!f) return;
+      const g = game.current!;
+      if (f.kind === "art" && g.overlay?.kind !== "art") setArtFrom(rectOf(f.art.id));
+      g.keys.clear();
+      g.stick = { x: 0, y: 0 };
+      g.legs = [];
+      g.goal = null;
+      g.pending = null;
+      g.overlay = f;
+      setOverlay(f);
+    },
+    [rectOf],
+  );
 
   const close = useCallback(() => {
     game.current!.overlay = null;
@@ -242,7 +277,10 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
       g.overlay = null;
       setOverlay(null);
       if (to === g.at.level) return;
-      const travel = Math.max(3, Math.min(9, Math.abs(b.levels[to].y - b.levels[g.at.level].y) / 3.2));
+      const travel = Math.max(
+        3,
+        Math.min(9, Math.abs(b.levels[to].y - b.levels[g.at.level].y) / 3.2),
+      );
       g.ride = { from: g.at.level, to, from0: { ...g.at.pos }, travel };
       g.legs = [];
       g.goal = null;
@@ -257,7 +295,11 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
 
   /** Walks to `to` (any floor), then turns to face `arrive` and opens or does `then`. */
   const walkTo = useCallback(
-    (to: Place, arrive: { yaw: number; pitch: number } | null, then: Focus | { kind: "ride"; to: number } | null) => {
+    (
+      to: Place,
+      arrive: { yaw: number; pitch: number } | null,
+      then: Focus | { kind: "ride"; to: number } | null,
+    ) => {
       const g = game.current!;
       const legs = route(b, g.at, to);
       if (!legs) return false;
@@ -278,7 +320,8 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
       g.overlay = null;
       setOverlay(null);
       containerRef.current?.focus({ preventScroll: true });
-      if (Math.hypot(g.at.pos.x - b.lift.call.x, g.at.pos.z - b.lift.call.z) < 1.6) return ride(level);
+      if (Math.hypot(g.at.pos.x - b.lift.call.x, g.at.pos.z - b.lift.call.z) < 1.6)
+        return ride(level);
       const view = viewpoint(b, { kind: "lift" }, g.at.level);
       walkTo({ level: g.at.level, pos: view.at }, view, { kind: "ride", to: level });
     },
@@ -316,7 +359,10 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
     getAudio()?.focus(overlay?.kind === "art");
   }, [overlay]);
 
-  const roomArt = useCallback((room: number) => b.artworks.filter((a) => a.room === room), [b.artworks]);
+  const roomArt = useCallback(
+    (room: number) => b.artworks.filter((a) => a.room === room),
+    [b.artworks],
+  );
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === shellRef.current);
@@ -337,10 +383,15 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
     let scene: MuseumScene | null = null;
 
     const run = async () => {
-      const [{ createMuseumScene }] = await Promise.all([import("./scene"), document.fonts?.ready.catch(() => undefined)]);
+      const [{ createMuseumScene }] = await Promise.all([
+        import("./scene"),
+        document.fonts?.ready.catch(() => undefined),
+      ]);
       if (cancelled) return;
       const sans = getComputedStyle(container).fontFamily || "system-ui, sans-serif";
-      const display = getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim() || sans;
+      const display =
+        getComputedStyle(document.documentElement).getPropertyValue("--font-display").trim() ||
+        sans;
       const coarse = window.matchMedia("(pointer: coarse)").matches;
       try {
         scene = createMuseumScene(canvas, { building: b, fonts: { sans, display }, low: coarse });
@@ -385,9 +436,14 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
           const to = { x: from.x, z: from.z - 7.2 };
           const w = span(t, 0, INTRO.walkTo);
           const before = g.at.pos;
-          g.at = { level: 0, pos: { x: from.x + (to.x - from.x) * w, z: from.z + (to.z - from.z) * w } };
+          g.at = {
+            level: 0,
+            pos: { x: from.x + (to.x - from.x) * w, z: from.z + (to.z - from.z) * w },
+          };
           g.stride += Math.hypot(g.at.pos.x - before.x, g.at.pos.z - before.z);
-          const up = reduced ? 0 : span(t, INTRO.lookFrom, INTRO.lookUp) * (1 - span(t, INTRO.hold, INTRO.lookDown));
+          const up = reduced
+            ? 0
+            : span(t, INTRO.lookFrom, INTRO.lookUp) * (1 - span(t, INTRO.hold, INTRO.lookDown));
           g.pitch = up * 0.95;
           if (t >= INTRO.end) finishScript();
         } else if (g.phase === "arriving") {
@@ -397,14 +453,26 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
           const crossed = (at: number) => t0 < at && t >= at;
           if (crossed(ARRIVAL.chime)) audio?.chime(0, 0.9);
           if (crossed(ARRIVAL.doors)) audio?.doors(0, 0.9, true);
-          g.lift = { y: b.levels[g.at.level].y, at: g.at.level, open: span(t, ARRIVAL.doors, ARRIVAL.doors + 0.9) };
+          g.lift = {
+            y: b.levels[g.at.level].y,
+            at: g.at.level,
+            open: span(t, ARRIVAL.doors, ARRIVAL.doors + 0.9),
+          };
           if (reduced && t >= ARRIVAL.doors + 0.6) g.clock = ARRIVAL.end;
           const exit = liftExitPose(b, g.at.level);
           const w = span(t, ARRIVAL.walkFrom, ARRIVAL.walkTo);
           const before = g.at.pos;
-          g.at = { level: g.at.level, pos: { x: b.lift.car.x + (exit.pos.x - b.lift.car.x) * w, z: b.lift.car.z + (exit.pos.z - b.lift.car.z) * w } };
+          g.at = {
+            level: g.at.level,
+            pos: {
+              x: b.lift.car.x + (exit.pos.x - b.lift.car.x) * w,
+              z: b.lift.car.z + (exit.pos.z - b.lift.car.z) * w,
+            },
+          };
           g.stride += Math.hypot(g.at.pos.x - before.x, g.at.pos.z - before.z);
-          g.yaw = Math.PI / 2 + angleDiff(Math.PI / 2, exit.yaw) * span(t, ARRIVAL.turnFrom, ARRIVAL.turnTo);
+          g.yaw =
+            Math.PI / 2 +
+            angleDiff(Math.PI / 2, exit.yaw) * span(t, ARRIVAL.turnFrom, ARRIVAL.turnTo);
           ground = b.levels[g.at.level].y;
           if (g.clock >= ARRIVAL.end) finishScript();
         } else if (g.phase === "riding" && g.ride) {
@@ -424,7 +492,13 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
           const inside = b.lift.car;
           if (t < T.move) {
             const w = span(t, 0, T.walkIn);
-            g.at = { level: r.from, pos: { x: r.from0.x + (inside.x - r.from0.x) * w, z: r.from0.z + (inside.z - r.from0.z) * w } };
+            g.at = {
+              level: r.from,
+              pos: {
+                x: r.from0.x + (inside.x - r.from0.x) * w,
+                z: r.from0.z + (inside.z - r.from0.z) * w,
+              },
+            };
             g.yaw = approach(g.yaw, -Math.PI / 2, dt * 2.6);
             g.pitch = approach(g.pitch, 0, dt);
             g.lift = { y: y0, at: r.from, open: 1 - span(t, T.close, T.close + 0.9) };
@@ -433,13 +507,24 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
             g.lift = { y: y0 + (y1 - y0) * w, at: null, open: 0 };
             g.at = { level: w > 0.5 ? r.to : r.from, pos: inside };
             // Look out through the glass, up or down the atrium as it passes.
-            g.pitch = approach(g.pitch, Math.sign(y1 - y0) * 0.18 * (1 - Math.abs(w - 0.5) * 2), dt * 0.6);
+            g.pitch = approach(
+              g.pitch,
+              Math.sign(y1 - y0) * 0.18 * (1 - Math.abs(w - 0.5) * 2),
+              dt * 0.6,
+            );
           } else {
             const exit = liftExitPose(b, r.to);
             g.lift = { y: y1, at: r.to, open: span(t, T.open, T.open + 0.9) };
             const w = span(t, T.walkOut, T.walkOut + 1.9);
-            g.at = { level: r.to, pos: { x: inside.x + (exit.pos.x - inside.x) * w, z: inside.z + (exit.pos.z - inside.z) * w } };
-            g.yaw = -Math.PI / 2 + angleDiff(-Math.PI / 2, exit.yaw) * span(t, T.turnOut, T.walkOut + 2);
+            g.at = {
+              level: r.to,
+              pos: {
+                x: inside.x + (exit.pos.x - inside.x) * w,
+                z: inside.z + (exit.pos.z - inside.z) * w,
+              },
+            };
+            g.yaw =
+              -Math.PI / 2 + angleDiff(-Math.PI / 2, exit.yaw) * span(t, T.turnOut, T.walkOut + 2);
             g.pitch = approach(g.pitch, 0, dt);
           }
           g.stride += Math.hypot(g.at.pos.x - before.x, g.at.pos.z - before.z);
@@ -453,7 +538,10 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
         if (!g.overlay && walking) {
           g.yaw += ((k.has("ArrowLeft") ? 1 : 0) - (k.has("ArrowRight") ? 1 : 0)) * TURN * dt;
         }
-        let ahead = (k.has("w") || k.has("ArrowUp") ? 1 : 0) - (k.has("s") || k.has("ArrowDown") ? 1 : 0) - g.stick.y;
+        let ahead =
+          (k.has("w") || k.has("ArrowUp") ? 1 : 0) -
+          (k.has("s") || k.has("ArrowDown") ? 1 : 0) -
+          g.stick.y;
         let side = (k.has("d") ? 1 : 0) - (k.has("a") ? 1 : 0) + g.stick.x;
         const amount = Math.hypot(ahead, side);
         if (amount > 1) {
@@ -491,7 +579,8 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
             want = { x: (dx / dist) * speed, z: (dz / dist) * speed };
             // Look where you're going, unless you're looking around.
             const final = g.legs[g.legs.length - 1];
-            const lookAhead = Math.hypot(final.x - g.at.pos.x, final.z - g.at.pos.z) > 1.2 || g.legs.length > 1;
+            const lookAhead =
+              Math.hypot(final.x - g.at.pos.x, final.z - g.at.pos.z) > 1.2 || g.legs.length > 1;
             if (!g.drag?.moved && lookAhead) {
               g.yaw = approach(g.yaw, yawToward(g.at.pos, target), dt * 2.6);
               g.pitch = approach(g.pitch, 0, dt * 0.8);
@@ -599,7 +688,8 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
         const steps = Math.floor(g.stride / STEP);
         if (steps !== g.steps) {
           g.steps = steps;
-          if (pace > 0.2 && g.zoom < 0.5) audio?.footstep(surfaceAt(b, g.at), Math.min(1, 0.45 + pace * 0.55));
+          if (pace > 0.2 && g.zoom < 0.5)
+            audio?.footstep(surfaceAt(b, g.at), Math.min(1, 0.45 + pace * 0.55));
         }
         const bob = reduced ? 0 : Math.sin(g.stride * 4.2) * 0.022 * pace;
         g.zoom += (g.zoomTo - g.zoom) * (reduced ? 1 : Math.min(1, dt * 8));
@@ -658,7 +748,11 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
         if (e.key === "Escape") return exitArt.current ? exitArt.current() : close();
         // Let sliders and buttons inside the overlay keep their own arrow keys.
         const inControl = e.target instanceof HTMLInputElement;
-        if (!inControl && g.overlay.kind === "art" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        if (
+          !inControl &&
+          g.overlay.kind === "art" &&
+          (e.key === "ArrowLeft" || e.key === "ArrowRight")
+        ) {
           const art = g.overlay.art;
           const list = roomArt(art.room);
           const i = list.findIndex((a) => a.id === art.id);
@@ -723,7 +817,12 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
 
   const pickAt = (clientX: number, clientY: number) => {
     const rect = canvasRef.current!.getBoundingClientRect();
-    return sceneRef.current?.pick(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1) ?? null;
+    return (
+      sceneRef.current?.pick(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      ) ?? null
+    );
   };
 
   const onClick = (clientX: number, clientY: number) => {
@@ -755,13 +854,26 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
       const d = g.drag;
       d.moved = true;
       e.currentTarget.setPointerCapture(e.pointerId);
-      g.pinch = { id: e.pointerId, x: e.clientX, y: e.clientY, dist: Math.hypot(e.clientX - d.x, e.clientY - d.y) || 1, zoom: g.zoomTo };
+      g.pinch = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        dist: Math.hypot(e.clientX - d.x, e.clientY - d.y) || 1,
+        zoom: g.zoomTo,
+      };
       return;
     }
     if (g.drag) return;
     containerRef.current?.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
-    g.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
+    g.drag = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      sx: e.clientX,
+      sy: e.clientY,
+      moved: false,
+    };
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -837,7 +949,11 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
               : null;
 
   const level = b.levels[place.level];
-  const floors = b.levels.map((l) => ({ slug: l.slug, level: l.number, name: l.index === 0 ? `Lobby · ${l.name}` : l.name }));
+  const floors = b.levels.map((l) => ({
+    slug: l.slug,
+    level: l.number,
+    name: l.index === 0 ? `Lobby · ${l.name}` : l.name,
+  }));
   const startLevel = b.levels[start.kind === "lift" ? start.level : 0];
 
   return (
@@ -913,8 +1029,12 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold tracking-wide text-muted">Floor {startLevel.number}</p>
-                  <h2 className="wall-title mt-1 text-[clamp(1.75rem,6vw,2.5rem)]">{startLevel.name}</h2>
+                  <p className="text-sm font-semibold tracking-wide text-muted">
+                    Floor {startLevel.number}
+                  </p>
+                  <h2 className="wall-title mt-1 text-[clamp(1.75rem,6vw,2.5rem)]">
+                    {startLevel.name}
+                  </h2>
                   <p className="mt-2 text-muted">{startLevel.tagline}</p>
                 </>
               )}
@@ -928,11 +1048,17 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
                 <Arrow />
               </button>
               <p className="mt-3">
-                <button type="button" onClick={() => enter(false)} className="text-sm font-semibold underline underline-offset-4">
+                <button
+                  type="button"
+                  onClick={() => enter(false)}
+                  className="text-sm font-semibold underline underline-offset-4"
+                >
                   Enter without sound
                 </button>
               </p>
-              <p className="mt-4 text-xs text-muted">Music is composed live as you walk. Headphones recommended.</p>
+              <p className="mt-4 text-xs text-muted">
+                Music is composed live as you walk. Headphones recommended.
+              </p>
             </div>
           </div>
         )}
@@ -946,7 +1072,10 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
             />
 
             <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
-              <p aria-live="polite" className={`${PLAQUE} flex max-w-[52%] items-center gap-2 truncate`}>
+              <p
+                aria-live="polite"
+                className={`${PLAQUE} flex max-w-[52%] items-center gap-2 truncate`}
+              >
                 <span className="grid size-6 shrink-0 place-items-center rounded-full bg-ink font-display text-xs font-bold text-wall tabular-nums">
                   {level.number}
                 </span>
@@ -1005,21 +1134,27 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
             )}
 
             {phase === "free" && (help || (hint && !focus)) && (
-              <div className={`pointer-events-none absolute inset-x-0 flex justify-center px-3 ${touch ? "bottom-40" : "bottom-4"}`}>
-                <div className={`max-w-md px-4 py-3 text-center text-sm leading-relaxed ${PLAQUE_BASE}`}>
+              <div
+                className={`pointer-events-none absolute inset-x-0 flex justify-center px-3 ${touch ? "bottom-40" : "bottom-4"}`}
+              >
+                <div
+                  className={`max-w-md px-4 py-3 text-center text-sm leading-relaxed ${PLAQUE_BASE}`}
+                >
                   {touch ? (
                     <>
-                      Drag to look around. Walk with the stick, or tap the floor to walk there, even on another floor.
-                      Tap a painting to go up to it. Pinch to step back and see yourself.
+                      Drag to look around. Walk with the stick, or tap the floor to walk there, even
+                      on another floor. Tap a painting to go up to it. Pinch to step back and see
+                      yourself.
                     </>
                   ) : (
                     <>
                       Drag to look around. Walk with <Kbd>W</Kbd>
                       <Kbd>A</Kbd>
                       <Kbd>S</Kbd>
-                      <Kbd>D</Kbd> or the arrow keys (hold <Kbd>Shift</Kbd> to hurry), or click the floor to walk there,
-                      even on another floor. Click a painting, then press <Kbd>E</Kbd>. <Kbd>F</Kbd> opens the floor
-                      directory; scroll (or <Kbd>V</Kbd>) steps back to see yourself; <Kbd>M</Kbd> is the sound.
+                      <Kbd>D</Kbd> or the arrow keys (hold <Kbd>Shift</Kbd> to hurry), or click the
+                      floor to walk there, even on another floor. Click a painting, then press{" "}
+                      <Kbd>E</Kbd>. <Kbd>F</Kbd> opens the floor directory; scroll (or <Kbd>V</Kbd>)
+                      steps back to see yourself; <Kbd>M</Kbd> is the sound.
                     </>
                   )}
                 </div>
@@ -1027,7 +1162,9 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
             )}
 
             {phase === "free" && focus && focusLabel && !overlay && (
-              <div className={`absolute flex justify-center px-3 ${touch ? "right-0 bottom-6 left-36" : "inset-x-0 bottom-4"}`}>
+              <div
+                className={`absolute flex justify-center px-3 ${touch ? "right-0 bottom-6 left-36" : "inset-x-0 bottom-4"}`}
+              >
                 <button
                   type="button"
                   onClick={() => open(focus)}
@@ -1081,55 +1218,9 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
   );
 }
 
-/** A thumb stick for touch screens: push it the way you want to walk. */
-function Stick({ onChange }: { onChange: (x: number, y: number) => void }) {
-  const base = useRef<HTMLDivElement>(null);
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
-  const active = useRef<number | null>(null);
-  const R = 44;
-
-  const update = (e: React.PointerEvent) => {
-    const rect = base.current!.getBoundingClientRect();
-    let x = e.clientX - (rect.left + rect.width / 2);
-    let y = e.clientY - (rect.top + rect.height / 2);
-    const len = Math.hypot(x, y);
-    if (len > R) {
-      x = (x / len) * R;
-      y = (y / len) * R;
-    }
-    setKnob({ x, y });
-    onChange(x / R, y / R);
-  };
-  const end = () => {
-    active.current = null;
-    setKnob({ x: 0, y: 0 });
-    onChange(0, 0);
-  };
-
-  return (
-    <div
-      ref={base}
-      role="presentation"
-      className="absolute bottom-6 left-6 grid size-28 touch-none place-items-center rounded-full border border-white/40 bg-black/25 backdrop-blur-sm"
-      onPointerDown={(e) => {
-        if (active.current !== null) return;
-        active.current = e.pointerId;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        update(e);
-      }}
-      onPointerMove={(e) => {
-        if (active.current === e.pointerId) update(e);
-      }}
-      onPointerUp={end}
-      onPointerCancel={end}
-    >
-      <div className="size-12 rounded-full bg-white/85 shadow-lg" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
-    </div>
-  );
-}
-
 /** A wall plaque set over the view: the wall's own colors, solid, with a soft shadow. */
-const PLAQUE_BASE = "bg-wall text-ink shadow-[0_0.5rem_1rem_-0.5rem_rgb(0_0_0/0.6)] transition-colors duration-700";
+const PLAQUE_BASE =
+  "bg-wall text-ink shadow-[0_0.5rem_1rem_-0.5rem_rgb(0_0_0/0.6)] transition-colors duration-700";
 const PLAQUE = `${PLAQUE_BASE} px-3.5 py-2 text-sm font-semibold`;
 
 function Kbd({ children }: { children: React.ReactNode }) {

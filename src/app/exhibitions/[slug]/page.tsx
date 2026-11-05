@@ -24,8 +24,9 @@ import {
   getExhibitionsOnFloor,
   getFloorForExhibition,
   getMovement,
+  getWorldsForRoom,
 } from "@/lib/museum/registry";
-import type { Artwork, Exhibition, Floor, Movement } from "@/lib/museum/types";
+import type { Artwork, Exhibition, Floor, Movement, PaintingWorld } from "@/lib/museum/types";
 
 export function generateStaticParams() {
   return getExhibitions().map((e) => ({ slug: e.slug }));
@@ -99,10 +100,46 @@ async function RoomWalls({ params }: { params: PageProps<"/exhibitions/[slug]">[
           </div>
         </section>
 
+        {getWorldsForRoom(exhibition.slug).map((w) => (
+          <WorldDoor key={w.slug} world={w} />
+        ))}
         {nextRoom && <NextRoom room={nextRoom} />}
         {upstairs && floor && <ElevatorDoors from={floor} to={upstairs} />}
       </div>
     </WallRepaint>
+  );
+}
+
+/** A way into a painting's world, after the room's own works. */
+function WorldDoor({ world }: { world: PaintingWorld }) {
+  return (
+    <section aria-labelledby={`world-${world.slug}`} className="bg-[#0e1a3d] text-[#e9eefb]">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-12 sm:px-6 md:grid-cols-12 md:py-16">
+        <div className="md:col-span-7">
+          <p className="text-sm font-semibold tracking-wide text-[#f8e27a] uppercase">
+            Step into a painting
+          </p>
+          <h2
+            id={`world-${world.slug}`}
+            className="mt-3 text-3xl leading-tight font-semibold md:text-4xl"
+          >
+            {world.title}
+          </h2>
+          <p className="mt-1 text-[#aebbd8]">
+            After {world.artist}, {world.year}
+          </p>
+          <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-pretty">{world.intro}</p>
+        </div>
+        <div className="flex items-end md:col-span-5 md:justify-end">
+          <Link
+            href={`/worlds/${world.slug}`}
+            className="inline-flex items-center gap-2 bg-[#f3efe2] px-5 py-3 font-semibold text-[#141414]"
+          >
+            Walk into it <Arrow />
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }
 
