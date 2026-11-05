@@ -5,7 +5,10 @@ import { useEffect, useId, useRef } from "react";
 import { Agamograph } from "@/components/agamograph";
 import { ArtworkPlaceholder } from "@/components/artwork-frame";
 import { Arrow, BUTTON, TEXT_LINK } from "@/components/gallery/wall-parts";
-import type { FloorPlan, PlanArtwork, PlanRoom } from "@/lib/walk/floor-plan";
+import type { Building, PlanArtwork, PlanRoom, Portal } from "@/lib/walk/building";
+
+/** A floor as the lift and the directory list it. */
+export type FloorChoice = { slug: string; level: number; name: string; tagline?: string };
 
 /**
  * Modal shell: a panel of the floor's own wall over a dark backdrop. Focus
@@ -257,7 +260,7 @@ export function ElevatorPanel({
   onChoose,
   onClose,
 }: {
-  floors: FloorPlan["floors"];
+  floors: FloorChoice[];
   current: string;
   onChoose: (slug: string) => void;
   onClose: () => void;
@@ -266,7 +269,7 @@ export function ElevatorPanel({
   return (
     <Dialog labelledBy={titleId} onClose={onClose}>
       <h2 id={titleId} className="wall-title text-[clamp(2rem,5vw,2.75rem)]">
-        Elevator
+        Lift
       </h2>
       <ol className="mt-6 space-y-1">
         {[...floors].reverse().map((f) => {
@@ -298,8 +301,92 @@ export function ElevatorPanel({
           );
         })}
       </ol>
-      <Link href="/" className={`${BUTTON} mt-8`}>
-        Leave to the lobby
+      <Link href="/" className={`${TEXT_LINK} mt-8 inline-block`}>
+        Leave the museum
+      </Link>
+    </Dialog>
+  );
+}
+
+/**
+ * The floor directory, as the information desk hands it out: every floor and
+ * its rooms, with the lift to take you there.
+ */
+export function Directory({
+  building,
+  current,
+  onGo,
+  onClose,
+}: {
+  building: Building;
+  current: number;
+  onGo: (level: number) => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  return (
+    <Dialog labelledBy={titleId} onClose={onClose}>
+      <h2 id={titleId} className="wall-title pr-10 text-[clamp(2rem,5vw,2.75rem)]">
+        Floor directory
+      </h2>
+      <p className="mt-2 text-muted">
+        Take the lift, or the stairs across the atrium. The grand stair in the lobby goes up to Floor 2.
+      </p>
+      <ol className="mt-6 divide-y divide-line border-y border-line">
+        {[...building.levels].reverse().map((l) => {
+          const rooms = building.rooms.filter((r) => r.level === l.index);
+          const here = l.index === current;
+          return (
+            <li key={l.slug} className="flex items-start gap-4 py-3">
+              <span
+                className={`grid size-10 shrink-0 place-items-center rounded-full border font-display font-bold tabular-nums ${
+                  here ? "border-ink bg-ink text-wall" : "border-line"
+                }`}
+              >
+                {l.number}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{l.index === 0 ? `Lobby · ${l.name}` : l.name}</p>
+                <p className="text-sm text-muted">
+                  {rooms.map((r) => r.movement.name).join(" · ") || l.tagline}
+                  {building.portals.some((p) => p.level === l.index && p.kind !== "learn") &&
+                    ` · ${building.portals
+                      .filter((p) => p.level === l.index && p.kind !== "learn")
+                      .map((p) => p.title)
+                      .join(" · ")}`}
+                </p>
+              </div>
+              {here ? (
+                <span className="shrink-0 self-center text-sm text-muted">You are here</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onGo(l.index)}
+                  className="shrink-0 self-center text-sm font-semibold underline underline-offset-4 hover:text-accent"
+                >
+                  Go
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </Dialog>
+  );
+}
+
+/** A kiosk's screen: where it leads, and the way there. */
+export function PortalPanel({ portal, onClose }: { portal: Portal; onClose: () => void }) {
+  const titleId = useId();
+  const label = portal.kind === "studio" ? "Open the Studio" : portal.kind === "lab" ? "Step into the lab" : "Read the guides";
+  return (
+    <Dialog labelledBy={titleId} onClose={onClose}>
+      <h2 id={titleId} className="wall-title pr-10 text-[clamp(2rem,5vw,2.75rem)]">
+        {portal.title}
+      </h2>
+      <p className="mt-4 text-lg leading-relaxed text-pretty">{portal.blurb}</p>
+      <Link href={portal.href} className={`${BUTTON} mt-8`}>
+        {label}
         <Arrow />
       </Link>
     </Dialog>

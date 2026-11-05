@@ -11,8 +11,9 @@ AI MoMA is an open-source, interactive museum you can walk through in your brows
 **floor** holds **exhibitions** from a modern art movement: Pop Art, Op & Kinetic Art, and more
 as people contribute them. Visitors can:
 
-- 🏛 **Visit**: walk through each floor like a game (keyboard or tap), take the elevator
-  between floors, and walk up to a painting to see it full-size with its wall label.
+- 🏛 **Visit**: walk into the museum from the street: through the lobby, up the grand stair,
+  round a skylit atrium and through seven floors of galleries (keyboard or tap). Take the
+  stairs or the glass lift, and walk up to a painting to see it full-size with its wall label.
 - 📚 **Learn**: short, plain-language guides to how each movement worked and why it mattered.
 - 🎨 **Create**: upload a photo or write a prompt and have an AI model render it in a
   movement's style (for example, turn your selfie into a Pop Art silkscreen grid).
@@ -33,7 +34,7 @@ move, so its gallery will respond to your mouse, touch or phone tilt. The platfo
 | Area                                                 | State                                                                                |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Lobby, floors, exhibitions, learn pages              | ✅ Working, content lives in `src/content/`                                          |
-| Walkable floors (3D, first person, single player)    | ✅ `/floors/<floor>/walk`, with an elevator between floors and live-composed music   |
+| Walk the building (3D, first person, single player)  | ✅ `/walk` from the lobby, or `/floors/<floor>/walk` by lift; live-composed music    |
 | 17 movements, Impressionism → Op Art, on 7 floors    | ✅ 47 public-domain works + 35 code-drawn Studio pieces; every room hangs at least 4 |
 | Studio → generate → request exhibition               | ✅ Working end to end with the offline **mock** provider                             |
 | Real image models (OpenAI, Google, FLUX, Qwen-Image) | 🔌 Adapter stubs; pick and implement next                                            |
@@ -88,7 +89,8 @@ src/
   app/                    Routes (Next.js App Router)
     page.tsx              Lobby + floor directory
     floors/[floor]/       A floor and its exhibitions
-    floors/[floor]/walk/  The same floor in 3D, to walk through
+    walk/                 The whole building in 3D, from the lobby
+    floors/[floor]/walk/  The same, arriving by lift on that floor
     exhibitions/[slug]/   One gallery
     learn/                Education pages per movement
     studio/               Generate art, then request an exhibition
@@ -103,9 +105,9 @@ src/
     museum/               Domain types, registry, content validation
     generation/           Provider interface, registry, adapters
     submissions/          Exhibition-request schema + store
-    walk/                 Floor plan builder, pathfinding, first-person movement
+    walk/                 The building's plan, stairs, routes, first-person movement
   components/             Shared UI (artwork frame, placeholders)
-    walk/                 three.js scene, walk loop, viewer / elevator overlays
+    walk/                 three.js building, city, visitors; walk loop; overlays
 public/art/               Downloaded public-domain images
 scripts/                  `fetch-public-domain-art.mjs`
 tests/                    Vitest unit tests

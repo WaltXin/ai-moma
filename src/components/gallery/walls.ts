@@ -22,6 +22,14 @@ export const STUDIO_WALL: Wall = {
   line: "#bdbfb9",
 };
 
+/** Round the 3D walk: dark, like the edges of a cinema screen, so the building is what you see. */
+export const WALK_WALL: Wall = {
+  wall: "#161514",
+  ink: "#f2efe9",
+  muted: "#a9a49b",
+  line: "#2c2a27",
+};
+
 /** One wall color per floor, like rooms in a real museum. */
 const FLOOR_WALLS: Record<string, Wall> = {
   "light-and-color": { wall: "#1d2f4f", ink: "#f3efe6", muted: "#b9c5d8", line: "#3a4f73" },

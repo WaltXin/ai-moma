@@ -3,21 +3,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { WallFallback } from "@/components/gallery/wall-fallback";
-import { Elevator, FloorBadge, KeepHyphens, TEXT_LINK } from "@/components/gallery/wall-parts";
+import { TEXT_LINK } from "@/components/gallery/wall-parts";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
-import { floorWall, wallVars } from "@/components/gallery/walls";
+import { WALK_WALL, wallVars } from "@/components/gallery/walls";
 import { FLOOR_LABS, PerceptionLab } from "@/components/perception/perception-lab";
-import { WalkableFloor } from "@/components/walk/walkable-floor";
-import { getExhibitionsOnFloor, getFloor, getFloors, getMovements } from "@/lib/museum/registry";
-import { buildFloorPlan } from "@/lib/walk/floor-plan";
+import { museumBuilding } from "@/components/walk/museum-building";
+import { WalkableBuilding } from "@/components/walk/walkable-building";
+import { getFloor, getFloors } from "@/lib/museum/registry";
 
 export function generateStaticParams() {
   return getFloors().map((f) => ({ floor: f.slug }));
 }
 
-export async function generateMetadata(
-  props: PageProps<"/floors/[floor]/walk">,
-): Promise<Metadata> {
+export async function generateMetadata(props: PageProps<"/floors/[floor]/walk">): Promise<Metadata> {
   const floor = getFloor((await props.params).floor);
   return {
     title: floor ? `Walk Floor ${floor.level}: ${floor.name}` : "Floor not found",
@@ -29,58 +27,32 @@ export default function WalkFloorPage(props: PageProps<"/floors/[floor]/walk">) 
   // The page reads its address, so it streams in behind the wall it replaces.
   return (
     <Suspense fallback={<WallFallback />}>
-      <WalkWalls params={props.params} />
+      <WalkFloor params={props.params} />
     </Suspense>
   );
 }
 
-async function WalkWalls({ params }: { params: PageProps<"/floors/[floor]/walk">["params"] }) {
+async function WalkFloor({ params }: { params: PageProps<"/floors/[floor]/walk">["params"] }) {
   const floor = getFloor((await params).floor);
   if (!floor) notFound();
 
-  // Some floors are better shown as a hands-on lab than as a map.
+  // Some floors are better shown as a hands-on lab.
   if (FLOOR_LABS.has(floor.slug)) return <PerceptionLab floor={floor} />;
 
-  const floors = getFloors();
-  const wall = floorWall(floor.slug);
-  const plan = buildFloorPlan({
-    floor,
-    exhibitions: getExhibitionsOnFloor(floor),
-    movements: getMovements(),
-    floors,
-  });
+  const building = museumBuilding();
+  const level = building.levels.findIndex((l) => l.slug === floor.slug);
 
   return (
-    <WallRepaint id={`walk-${floor.slug}`} initial={wall}>
-      {/* Pull the floor out to the full width of the window. */}
+    <WallRepaint id={`walk-${floor.slug}`} initial={WALK_WALL}>
       <div className="-my-10 mx-[calc(50%-50vw)]">
-        <section
-          data-wall=""
-          style={wallVars(wall)}
-          aria-labelledby="walk-title"
-          className="pb-12 md:pb-16"
-        >
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6 pt-8 pb-8 md:pt-10">
-              <div className="flex items-center gap-4">
-                <FloorBadge level={floor.level} />
-                <div>
-                  <h1 id="walk-title" className="wall-title text-[clamp(1.75rem,3.4vw,2.75rem)]">
-                    <span className="sr-only">Walk floor {floor.level}: </span>
-                    <KeepHyphens text={floor.name} />
-                  </h1>
-                  <p className="mt-1 text-muted">{floor.tagline}</p>
-                </div>
-              </div>
-              <Elevator floors={floors} current={floor.slug} walk row />
-            </header>
-          </div>
-
-          {/* Edge to edge, filling the window under the header. Remount per floor so the visitor starts at the elevator. */}
-          <WalkableFloor key={plan.floor.slug} plan={plan} wall={wall} />
-
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <p className="mt-6 text-muted">
+        <section data-wall="" style={wallVars(WALK_WALL)} aria-labelledby="walk-title">
+          <h1 id="walk-title" className="sr-only">
+            Walk floor {floor.level}: {floor.name}
+          </h1>
+          {/* Remount per floor, so the visit starts in the lift on the floor asked for. */}
+          <WalkableBuilding key={floor.slug} building={building} start={{ kind: "lift", level }} />
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+            <p className="text-muted">
               Prefer reading?{" "}
               <Link href={`/floors/${floor.slug}`} className={`${TEXT_LINK} text-ink`}>
                 See this floor as a guide

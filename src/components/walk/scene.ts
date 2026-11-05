@@ -1,165 +1,100 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import type { Wall } from "@/components/gallery/walls";
-import { seedFrom, seededRandom } from "@/lib/museum/placeholder";
-import { type FloorPlan, type PlanArtwork, ROW, Tile, tileAt } from "@/lib/walk/floor-plan";
-import {
-  CEILING,
-  type Focus,
-  type Vec,
-  artCenter,
-  collides,
-  elevatorCenter,
-  forward,
-  lenticularView,
-  standCenter,
-} from "@/lib/walk/motion";
+import { type Building, type Vec, inRect, spaceAt, stairProgress } from "@/lib/walk/building";
+import { type Focus, type Place, collides, forward, stairAt } from "@/lib/walk/motion";
+import { type Architecture, buildArchitecture } from "./architecture";
+import { type City, buildCity } from "./city";
+import { type Furnishing, buildFurnishing } from "./furnishing";
+import type { Kit } from "./kit";
+import { type Crowd, type Figure, buildCrowd, buildSelf, pose } from "./people";
 import {
   type Fonts,
+  asphalt,
+  bookSpines,
+  cityWindows,
   contactShadow,
-  floorIndicator,
+  deck,
+  facadeRipples,
+  lightBeam,
   lightPool,
-  loadArt,
-  luma,
+  livingWall,
   mix,
-  placeholderArt,
-  standTop,
+  pavement,
+  skyline,
   stoneFloor,
-  waitingCard,
-  wallLabel,
-  wallLettering,
-  windowView,
+  sunThroughGlass,
   woodFloor,
 } from "./textures";
 
 /**
- * The floor in 3D, built from the same `FloorPlan` as everything else: every
- * wall tile becomes plaster, every painting a framed canvas under its own pool
- * of light. Plain three.js, no React, so the page can load it on demand.
- *
- * Units are metres; see `lib/walk/motion.ts` for the coordinate system.
+ * The whole museum in 3D, built from the same `Building` as everything
+ * else: seven floors round a skylit atrium, the lobby and the street, the
+ * paintings, the furniture and the other visitors. Plain three.js, no
+ * React, so the page can load it on demand.
  */
 
 export type ViewState = {
-  pos: Vec;
+  at: Place;
+  /** Height of the ground under the visitor (stairs, the lift car). */
+  ground: number;
   yaw: number;
   pitch: number;
-  /** Eye height, with the walking bob in it. */
+  /** Eye height above the ground, with the walking bob in it. */
   eye: number;
   time: number;
+  dt: number;
   focusId: string | null;
   hoverId: string | null;
   /** Where a click-to-walk is heading. */
-  marker: Vec | null;
+  marker: Place | null;
   /** How far behind the visitor the camera sits; 0 is through their eyes. */
   zoom: number;
   /** Metres walked, for the stride, and how fast (0–1) they're walking now. */
   stride: number;
   pace: number;
-  /** Holds the lift doors open (1) or shut (0); otherwise they open as you come near. */
-  lift?: number;
   /** 0–1: how hard the visitor is hurrying, which widens the view a touch. */
   rush: number;
+  /** The lift car's height, and which floor's doors are open, by how much. */
+  lift: { y: number; at: number | null; open: number };
+  /** Riding the lift: every floor is in view through the glass. */
+  riding: boolean;
 };
 
-export type Pick = { focus: Focus } | { floor: Vec } | null;
+export type Pick = { focus: Focus } | { place: Place } | null;
 
 export type MuseumScene = {
   resize(width: number, height: number, dpr: number): void;
   render(state: ViewState): void;
   /** What's under a point on screen, in normalized device coordinates. */
   pick(x: number, y: number): Pick;
+  /** The nearest car, for the sound of the street. */
+  nearestCar(p: Vec): { dist: number; dx: number; speed: number };
+  /** Other visitors, as circles to keep out of. */
+  obstacles(level: number): { x: number; z: number; r: number }[];
   dispose(): void;
 };
 
-/** Centre of a painting above the floor. */
-const HANG = 1.6;
-const DOOR_H = 2.9;
-/** Where a pulled-back camera aims: just above the visitor's head. */
-const AVATAR_HEAD = 2.05;
-
-const FRAMES = {
-  gilt: { maxW: 1.8, maxH: 1.45, profile: 0.1, depth: 0.075, mat: 0 },
-  black: { maxW: 1.9, maxH: 1.5, profile: 0.045, depth: 0.05, mat: 0 },
-  mat: { maxW: 1.35, maxH: 1.05, profile: 0.035, depth: 0.04, mat: 0.16 },
-} as const;
-
-const isWallTile = (t: number) => t === Tile.Wall || t === Tile.Face || t === Tile.Void;
-
-/** Collects quads into one mesh: one draw call for all the walls, one for each floor. */
-class Quads {
-  pos: number[] = [];
-  nor: number[] = [];
-  col: number[] = [];
-  uv: number[] = [];
-
-  /** Four corners counter-clockwise as seen from the front. */
-  add(p: THREE.Vector3Tuple[], n: THREE.Vector3Tuple, c: number[] = [1, 1, 1, 1], uv?: number[][]) {
-    for (const i of [0, 1, 2, 0, 2, 3]) {
-      this.pos.push(...p[i]);
-      this.nor.push(...n);
-      this.col.push(c[i], c[i], c[i]);
-      this.uv.push(...(uv ? uv[i] : [0, 0]));
-    }
-  }
-
-  /** An upright quad along the line a→b; it faces (−dz, dx). */
-  wall(ax: number, az: number, bx: number, bz: number, y0: number, y1: number, c0 = 1, c1 = 1) {
-    const dx = bx - ax;
-    const dz = bz - az;
-    const len = Math.hypot(dx, dz);
-    this.add(
-      [
-        [ax, y0, az],
-        [bx, y0, bz],
-        [bx, y1, bz],
-        [ax, y1, az],
-      ],
-      [-dz / len, 0, dx / len],
-      [c0, c0, c1, c1],
-    );
-  }
-
-  /** A level quad facing up (or down). */
-  level(x0: number, z0: number, x1: number, z1: number, y: number, down = false) {
-    const uv = (x: number, z: number) => [x / 2, z / 2];
-    const p: THREE.Vector3Tuple[] = [
-      [x0, y, z0],
-      [x0, y, z1],
-      [x1, y, z1],
-      [x1, y, z0],
-    ];
-    const order = down ? [0, 3, 2, 1] : [0, 1, 2, 3];
-    this.add(
-      order.map((i) => p[i]),
-      [0, down ? -1 : 1, 0],
-      undefined,
-      order.map((i) => uv(p[i][0], p[i][2])),
-    );
-  }
-
-  build(): THREE.BufferGeometry {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(this.pos, 3));
-    g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nor, 3));
-    g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(this.uv, 2));
-    return g;
-  }
+/** Where the sun is now: low in the morning and evening, never set (the museum keeps daylight hours). */
+export function sunNow(date = new Date()): THREE.Vector3 {
+  const h = date.getHours() + date.getMinutes() / 60;
+  // 0 at 7:00, 1 at 19:00, clamped to opening hours.
+  const t = Math.max(0.08, Math.min(0.92, (h - 7) / 12));
+  const elevation = 0.22 + Math.sin(t * Math.PI) * 0.78;
+  // East (+x) in the morning, south (+z) at noon, west (−x) in the evening.
+  const azimuth = (t - 0.5) * Math.PI;
+  return new THREE.Vector3(-Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.cos(azimuth) * Math.cos(elevation)).normalize();
 }
 
 export function createMuseumScene(
   canvasEl: HTMLCanvasElement,
-  { plan, wall, fonts }: { plan: FloorPlan; wall: Wall; fonts: Fonts },
+  { building: b, fonts, low }: { building: Building; fonts: Fonts; low: boolean },
 ): MuseumScene {
-  const renderer = new THREE.WebGLRenderer({
-    canvas: canvasEl,
-    antialias: true,
-    powerPreference: "high-performance",
-  });
+  const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: !low, powerPreference: "high-performance" });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1;
+  // Lets a test script read draw calls and triangles while developing.
+  if (process.env.NODE_ENV === "development") Object.assign(window, { __renderer: renderer });
 
   const trash: { dispose(): void }[] = [];
   const keep = <T extends { dispose(): void }>(x: T): T => {
@@ -171,691 +106,351 @@ export function createMuseumScene(
     const t = keep(new THREE.CanvasTexture(c));
     if (opts.color !== false) t.colorSpace = THREE.SRGBColorSpace;
     if (opts.repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = Math.min(8, maxAniso);
+    t.anisotropy = Math.min(low ? 4 : 8, maxAniso);
     return t;
   };
 
-  const dark = luma(wall.wall) < 110;
+  const sun = sunNow();
+  // Warmer and lower light early and late.
+  const warmth = 1 - Math.min(1, sun.y / 0.7);
+  const skyTop = new THREE.Color().set(mix("#4f86c6", "#6b7fa8", warmth * 0.5));
+  const skyHorizon = new THREE.Color().set(mix("#d9e4ec", "#f2d2a8", warmth * 0.8));
+  const daylight = 0.92 + 0.08 * (1 - warmth);
+
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
   const env = keep(pmrem.fromScene(new RoomEnvironment(), 0.04).texture);
   pmrem.dispose();
   scene.environment = env;
-  scene.environmentIntensity = 0.5;
-  const haze = mix(wall.wall, dark ? "#000000" : "#2a2622", dark ? 0.45 : 0.6);
-  scene.background = new THREE.Color(haze);
-  scene.fog = new THREE.Fog(haze, 18, 52);
+  scene.environmentIntensity = 0.45;
+  scene.background = skyHorizon.clone();
+  scene.fog = new THREE.Fog(skyHorizon.clone(), 140, 950);
 
-  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 120);
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 1500);
   camera.rotation.order = "YXZ";
 
-  // Light: soft sky from above, a key from the skylights, a little bounce.
-  scene.add(new THREE.HemisphereLight(0xfff6ea, mix(wall.wall, "#6b5a45", 0.5), 1.25));
-  const sun = new THREE.DirectionalLight(0xfff1dc, 1.1);
-  sun.position.set(-3, 10, 8);
-  scene.add(sun);
+  // Light: soft and even from above, as galleries are; a little warmth from the skylights.
+  scene.add(new THREE.HemisphereLight(0xfff6ea, 0x8a7a66, 1.15));
+  const top = new THREE.DirectionalLight(0xfff4e6, 0.55);
+  top.position.set(0.25, 1, 0.15);
+  scene.add(top);
 
-  const pickables: THREE.Object3D[] = [];
-  const box = (w: number, h: number, d: number) => keep(new THREE.BoxGeometry(w, h, d));
-  const plane = (w: number, h: number) => keep(new THREE.PlaneGeometry(w, h));
+  // ── Materials, by key, made on first use ──
+  const materials = new Map<string, THREE.Material>();
+  const textures = new Map<string, THREE.Texture>();
+  const texOnce = (key: string, make: () => HTMLCanvasElement, opts: { repeat?: boolean; color?: boolean } = {}) => {
+    let t = textures.get(key);
+    if (!t) textures.set(key, (t = tex(make(), opts)));
+    return t;
+  };
   const std = (p: THREE.MeshStandardMaterialParameters) => keep(new THREE.MeshStandardMaterial(p));
   const basic = (p: THREE.MeshBasicMaterialParameters) => keep(new THREE.MeshBasicMaterial(p));
-  const hidden = basic({ visible: false });
-  const shadowTex = tex(contactShadow(), { color: false });
-  const shadowMat = basic({ map: shadowTex, transparent: true, depthWrite: false });
-  const addShadow = (x: number, z: number, w: number, d: number) => {
-    const m = new THREE.Mesh(plane(w, d), shadowMat);
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(x, 0.004, z);
-    scene.add(m);
-  };
-
-  // ── Floors, walls, door lintels ────────────────────────────────────────
-  const wood = new Quads();
-  const stone = new Quads();
-  const walls = new Quads();
-  const skirting = new Quads();
-  const shade = { floor: 0.82, eye: 1, top: dark ? 0.82 : 0.72 };
-  const ex0 = plan.elevator.x;
-  const ex1 = plan.elevator.x + plan.elevator.w;
-  const lift = elevatorCenter(plan);
-  const opening = { x0: lift.x - 0.8, x1: lift.x + 0.8, h: 2.35 };
-
-  const upright = (ax: number, az: number, bx: number, bz: number, y0 = 0, y1 = CEILING) => {
-    const at = (y: number) =>
-      y <= 1.8
-        ? shade.floor + ((shade.eye - shade.floor) * y) / 1.8
-        : shade.eye + ((shade.top - shade.eye) * (y - 1.8)) / (CEILING - 1.8);
-    if (y0 < 1.8 && y1 > 1.8) {
-      walls.wall(ax, az, bx, bz, y0, 1.8, at(y0), at(1.8));
-      walls.wall(ax, az, bx, bz, 1.8, y1, at(1.8), at(y1));
-    } else walls.wall(ax, az, bx, bz, y0, y1, at(y0), at(y1));
-    if (y0 === 0) {
-      const dx = bx - ax;
-      const dz = bz - az;
-      const len = Math.hypot(dx, dz);
-      const o = 0.012;
-      skirting.wall(
-        ax - (dz / len) * o,
-        az + (dx / len) * o,
-        bx - (dz / len) * o,
-        bz + (dx / len) * o,
-        0,
-        0.11,
-      );
-    }
-  };
-
-  const floorKind = (x: number, y: number): "wood" | "stone" => {
-    const t = tileAt(plan, x, y);
-    if (t === Tile.Floor || t === Tile.Door) return "wood";
-    if (t === Tile.Corridor) return "stone";
-    // Furniture stands on whatever most of its neighbours are.
-    let w = 0;
-    let s = 0;
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const n = tileAt(plan, x + dx, y + dy);
-      if (n === Tile.Floor || n === Tile.Door) w++;
-      if (n === Tile.Corridor) s++;
-    }
-    return w >= s ? "wood" : "stone";
-  };
-
-  for (let y = 0; y < plan.rows; y++) {
-    for (let x = 0; x < plan.cols; x++) {
-      const t = tileAt(plan, x, y);
-      if (isWallTile(t)) continue;
-      (floorKind(x, y) === "wood" ? wood : stone).level(x, y, x + 1, y + 1, 0);
-      if (isWallTile(tileAt(plan, x, y - 1))) {
-        if (y === ROW.roomTop && x >= ex0 && x < ex1) {
-          // The lift wall is built below, with a hole for the doors.
-        } else upright(x, y, x + 1, y);
+  const outdoor = (hex: string) => new THREE.Color().set(hex).multiplyScalar(daylight);
+  const make = (key: string): THREE.Material => {
+    const [kind, arg] = key.split(/:(.*)/);
+    switch (kind) {
+      case "plaster":
+        return std({ color: arg, roughness: 0.93, metalness: 0, vertexColors: true });
+      case "skirting":
+        return std({ color: mix(arg, arg === "#f3f1ec" ? "#bdb8ae" : "#000000", 0.3), roughness: 0.6, vertexColors: true });
+      case "ceiling":
+        return std({ color: "#f2f0eb", roughness: 1, emissive: "#f2f0eb", emissiveIntensity: 0.5, vertexColors: true });
+      case "slab":
+        return std({ color: "#f2f0eb", roughness: 0.85, emissive: "#f2f0eb", emissiveIntensity: 0.12, vertexColors: true, side: THREE.DoubleSide });
+      case "drum":
+        return std({ color: "#f4f2ee", roughness: 0.9, emissive: "#f4f2ee", emissiveIntensity: 0.55, side: THREE.DoubleSide });
+      case "laylight":
+        return basic({ color: "#fff9ef" });
+      case "lamp":
+        return basic({ color: "#fff3dc" });
+      case "lamp-frame":
+        return std({ color: "#d9d7d1", roughness: 0.7 });
+      case "sky-glass":
+        return basic({ color: new THREE.Color("#f6fbff").multiplyScalar(1.15), toneMapped: false });
+      case "beam":
+        return basic({
+          map: texOnce("beam", lightBeam, { color: false }),
+          color: "#fff2da",
+          transparent: true,
+          opacity: 0.07,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          fog: false,
+        });
+      case "glass":
+        return std({
+          color: "#dfeaee",
+          transparent: true,
+          opacity: 0.13,
+          roughness: 0.05,
+          metalness: 0.1,
+          envMapIntensity: 1.6,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+      case "facade": {
+        const t = texOnce("facade", facadeRipples, { repeat: true });
+        t.repeat.set(1 / 4, 1 / 2);
+        return basic({ map: t, color: outdoor("#ffffff"), vertexColors: true });
       }
-      if (isWallTile(tileAt(plan, x, y + 1))) upright(x + 1, y + 1, x, y + 1);
-      if (isWallTile(tileAt(plan, x - 1, y))) upright(x, y + 1, x, y);
-      if (isWallTile(tileAt(plan, x + 1, y))) upright(x + 1, y, x + 1, y + 1);
-      if (t === Tile.Door) {
-        upright(x + 1, y, x, y, DOOR_H, CEILING);
-        upright(x, y + 1, x + 1, y + 1, DOOR_H, CEILING);
-        walls.level(x, y, x + 1, y + 1, DOOR_H, true);
-      }
-    }
-  }
-  // The lift wall, around the door opening.
-  upright(ex0, ROW.roomTop, opening.x0, ROW.roomTop);
-  upright(opening.x1, ROW.roomTop, ex1, ROW.roomTop);
-  upright(opening.x0, ROW.roomTop, opening.x1, ROW.roomTop, opening.h, CEILING);
-
-  const woodTex = tex(woodFloor(), { repeat: true });
-  const stoneTex = tex(stoneFloor(), { repeat: true });
-  const woodMesh = new THREE.Mesh(
-    keep(wood.build()),
-    std({ map: woodTex, roughness: 0.48, metalness: 0, envMapIntensity: 0.9 }),
-  );
-  const stoneMesh = new THREE.Mesh(
-    keep(stone.build()),
-    std({ map: stoneTex, roughness: 0.38, metalness: 0, envMapIntensity: 1 }),
-  );
-  woodMesh.userData.floor = true;
-  stoneMesh.userData.floor = true;
-  const wallMesh = new THREE.Mesh(
-    keep(walls.build()),
-    std({ color: wall.wall, roughness: 0.93, metalness: 0, vertexColors: true }),
-  );
-  const skirtMesh = new THREE.Mesh(
-    keep(skirting.build()),
-    std({
-      color: dark ? mix(wall.wall, "#ffffff", 0.14) : mix(wall.wall, "#000000", 0.3),
-      roughness: 0.6,
-    }),
-  );
-  scene.add(woodMesh, stoneMesh, wallMesh, skirtMesh);
-  pickables.push(woodMesh, stoneMesh, wallMesh);
-
-  // ── Ceiling and its lights ─────────────────────────────────────────────
-  // Galleries keep a pale ceiling whatever the walls, so the rooms stay bright.
-  const ceilingColor = mix("#f2efe9", wall.wall, 0.1);
-  const ceiling = new THREE.Mesh(
-    plane(plan.cols, plan.rows),
-    // Lit from below by the rooms; a little glow stands in for the bounce.
-    std({ color: ceilingColor, roughness: 1, emissive: ceilingColor, emissiveIntensity: 0.55 }),
-  );
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.set(plan.cols / 2, CEILING, plan.rows / 2);
-  scene.add(ceiling);
-
-  const glow = basic({ color: 0xfaf6ee });
-  const rimMat = std({ color: mix(ceilingColor, "#000000", 0.25), roughness: 0.8 });
-  const skylight = (x: number, z: number, w: number, d: number) => {
-    const rim = new THREE.Mesh(plane(w + 0.16, d + 0.16), rimMat);
-    rim.rotation.x = Math.PI / 2;
-    rim.position.set(x, CEILING - 0.004, z);
-    const lit = new THREE.Mesh(plane(w, d), glow);
-    lit.rotation.x = Math.PI / 2;
-    lit.position.set(x, CEILING - 0.008, z);
-    scene.add(rim, lit);
-    // Diffuser bars, so it reads as a skylight rather than a hole in the ceiling.
-    const bars = Math.max(1, Math.round(w / 0.9));
-    for (let i = 1; i < bars; i++) {
-      const bar = new THREE.Mesh(box(0.04, 0.03, d), rimMat);
-      bar.position.set(x - w / 2 + (i * w) / bars, CEILING - 0.02, z);
-      scene.add(bar);
-    }
-  };
-  const downlightGeo = keep(new THREE.CircleGeometry(0.12, 24));
-  const downlight = (x: number, z: number) => {
-    const m = new THREE.Mesh(downlightGeo, glow);
-    m.rotation.x = Math.PI / 2;
-    m.position.set(x, CEILING - 0.006, z);
-    scene.add(m);
-  };
-  const railMat = std({ color: 0x1c1c1c, roughness: 0.5, metalness: 0.4 });
-  const canGeo = keep(new THREE.CylinderGeometry(0.06, 0.075, 0.2, 16));
-
-  for (const room of plan.rooms) {
-    const zMid = (ROW.roomTop + ROW.roomBottom + 1) / 2;
-    skylight(room.x + room.w / 2, zMid + 0.6, Math.max(1, room.w - 3), 1.6);
-    const rail = new THREE.Mesh(box(room.w - 0.6, 0.04, 0.05), railMat);
-    rail.position.set(room.x + room.w / 2, CEILING - 0.03, ROW.roomTop + 1.6);
-    scene.add(rail);
-  }
-  for (let x = 2.5; x < plan.cols - 1; x += 3)
-    downlight(x, (ROW.corridorTop + ROW.corridorBottom + 1) / 2);
-  downlight(lift.x, ROW.roomTop + 2.5);
-  skylight(plan.lounge.x + plan.lounge.w / 2, ROW.roomTop + 3.5, plan.lounge.w - 3, 3);
-
-  // ── Paintings ──────────────────────────────────────────────────────────
-  const poolTex = tex(lightPool(), { color: false });
-  const giltMat = std({ color: 0xa88645, metalness: 0.8, roughness: 0.38 });
-  const blackMat = std({ color: 0x141414, metalness: 0.1, roughness: 0.45 });
-  const thinMat = std({ color: 0x1d1a17, metalness: 0.05, roughness: 0.55 });
-  const matBoard = std({ color: 0xf4f1ea, roughness: 0.95 });
-  const placeholderShade = dark ? mix(wall.wall, "#ffffff", 0.1) : mix(wall.wall, "#000000", 0.1);
-
-  type Hung = {
-    id: string;
-    art?: PlanArtwork;
-    pool: THREE.MeshBasicMaterial;
-    canvas: THREE.MeshStandardMaterial;
-    views?: { textures: (THREE.Texture | null)[]; over: THREE.MeshStandardMaterial };
-  };
-  const hung: Hung[] = [];
-
-  const hang = (
-    id: string,
-    cx: number,
-    aspect: number,
-    kind: keyof typeof FRAMES,
-    focus: Focus,
-  ) => {
-    const f = FRAMES[kind];
-    let w = f.maxW;
-    let h = w / aspect;
-    if (h > f.maxH) {
-      h = f.maxH;
-      w = h * aspect;
-    }
-    const group = new THREE.Group();
-    group.position.set(cx, HANG, ROW.roomTop);
-    scene.add(group);
-
-    const ow = w + 2 * f.mat;
-    const oh = h + 2 * f.mat;
-    const frameMat = kind === "gilt" ? giltMat : kind === "black" ? blackMat : thinMat;
-    const p = f.profile;
-    for (const [bx, by, bw, bh] of [
-      [0, oh / 2 + p / 2, ow + 2 * p, p],
-      [0, -oh / 2 - p / 2, ow + 2 * p, p],
-      [-ow / 2 - p / 2, 0, p, oh],
-      [ow / 2 + p / 2, 0, p, oh],
-    ]) {
-      const m = new THREE.Mesh(box(bw, bh, f.depth), frameMat);
-      m.position.set(bx, by, f.depth / 2);
-      group.add(m);
-    }
-    if (f.mat) {
-      const board = new THREE.Mesh(plane(ow, oh), matBoard);
-      board.position.z = 0.012;
-      group.add(board);
-    }
-    const canvasMat = std({
-      color: placeholderShade,
-      roughness: 0.82,
-      emissive: 0xffffff,
-      emissiveIntensity: 0,
-    });
-    const face = new THREE.Mesh(plane(w, h), canvasMat);
-    face.position.z = 0.016;
-    group.add(face);
-
-    // Light pool on the wall and a spot can on the ceiling rail aimed at it.
-    const pool = basic({
-      map: poolTex,
-      color: 0xfff0d8,
-      transparent: true,
-      opacity: 0.2,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    const poolMesh = new THREE.Mesh(plane(ow + 1.6, oh + 1.9), pool);
-    poolMesh.position.set(0, 0.25, 0.003);
-    group.add(poolMesh);
-    const can = new THREE.Mesh(canGeo, railMat);
-    can.position.set(cx, CEILING - 0.16, ROW.roomTop + 1.6);
-    can.rotation.x = -0.75;
-    scene.add(can);
-
-    const hit = new THREE.Mesh(box(ow + 2 * p + 0.1, oh + 2 * p + 0.1, 0.25), hidden);
-    hit.userData.focus = focus;
-    group.add(hit);
-    pickables.push(hit);
-
-    return { group, face, canvasMat, pool, w, h, outerW: ow + 2 * p };
-  };
-
-  const setImage = (m: THREE.MeshStandardMaterial, t: THREE.Texture) => {
-    m.map = t;
-    m.emissiveMap = t;
-    m.color.set(0xffffff);
-    m.needsUpdate = true;
-  };
-
-  for (const art of plan.artworks) {
-    const room = plan.rooms[art.room];
-    const img = art.image;
-    const aspect = img ? img.width / img.height : 4 / 3;
-    const cx = artCenter(art).x;
-    const piece = hang(art.id, cx, aspect, art.frame, { kind: "art", art });
-    const entry: Hung = { id: art.id, art, pool: piece.pool, canvas: piece.canvasMat };
-    hung.push(entry);
-
-    if (art.frames) {
-      // Two layers: the nearest view, and the next one fading in as you walk.
-      const over = std({
-        roughness: 0.82,
-        emissive: 0xffffff,
-        emissiveIntensity: 0,
-        transparent: true,
-        opacity: 0,
-      });
-      const overMesh = new THREE.Mesh(plane(piece.w, piece.h), over);
-      overMesh.position.z = 0.017;
-      piece.group.add(overMesh);
-      const textures: (THREE.Texture | null)[] = art.frames.map(() => null);
-      entry.views = { textures, over };
-      art.frames.forEach((frame, i) => {
-        loadArt(frame.src, frame.width, frame.height)
-          .then((c) => {
-            textures[i] = tex(c);
-            if (i === 0) setImage(piece.canvasMat, textures[i]!);
-          })
-          .catch(() => {});
-      });
-    } else if (img) {
-      loadArt(img.src, img.width, img.height)
-        .then((c) => setImage(piece.canvasMat, tex(c)))
-        .catch(() => {});
-    } else {
-      setImage(
-        piece.canvasMat,
-        tex(placeholderArt(room.movement.pattern, room.movement.palette, seedFrom(art.id))),
-      );
-    }
-
-    // The label to the right of the frame.
-    const label = new THREE.Mesh(
-      plane(0.24, 0.15),
-      std({ map: tex(wallLabel(art, fonts)), roughness: 0.9 }),
-    );
-    label.position.set(cx + piece.outerW / 2 + 0.3, 1.32, ROW.roomTop + 0.006);
-    scene.add(label);
-  }
-
-  // Empty frames in the Community Gallery wait for visitors' work.
-  const waiting = tex(waitingCard(wall.ink, wall.wall, fonts));
-  for (const room of plan.rooms) {
-    for (const sx of room.emptySlots) {
-      const piece = hang(`empty:${room.slug}:${sx}`, sx + 1.5, 4 / 3, "black", {
-        kind: "room",
-        room,
-      });
-      setImage(piece.canvasMat, waiting);
-      piece.canvasMat.emissiveIntensity = 0.1;
-    }
-  }
-
-  // ── Room lettering, info stands ────────────────────────────────────────
-  const lettering = (
-    lines: Parameters<typeof wallLettering>[0],
-    maxW: number,
-    place: (m: THREE.Mesh, w: number, h: number) => void,
-  ) => {
-    const { canvas: c, aspect } = wallLettering(lines, wall.ink, fonts);
-    const w = maxW;
-    const h = w / aspect;
-    const m = new THREE.Mesh(
-      plane(w, h),
-      basic({ map: tex(c), transparent: true, depthWrite: false, toneMapped: false }),
-    );
-    place(m, w, h);
-    scene.add(m);
-  };
-
-  const standMat = std({ color: 0x232323, roughness: 0.55, metalness: 0.2 });
-  for (const room of plan.rooms) {
-    // Outside, on the corridor wall right of the door.
-    const segX = room.doorX + 2;
-    const segLen = room.x + room.w - segX;
-    if (segLen > 3) {
-      lettering(
-        [
-          { text: room.movement.name, size: 120, weight: 800, font: "display" },
-          { text: room.title, size: 48, weight: 500 },
-          { text: room.movement.period, size: 40, weight: 400 },
-        ],
-        Math.min(segLen - 1.2, 5.2),
-        (m, w) => {
-          m.position.set(segX + 0.6 + w / 2, 2.35, ROW.roomWall + 1 + 0.004);
-        },
-      );
-    }
-
-    // A lectern just inside the door, read from its left.
-    const c = standCenter(room);
-    const stand = new THREE.Group();
-    stand.position.set(c.x, 0, c.z);
-    stand.rotation.y = -Math.PI / 2;
-    const post = new THREE.Mesh(box(0.34, 0.92, 0.3), standMat);
-    post.position.y = 0.46;
-    const top = new THREE.Mesh(box(0.62, 0.035, 0.46), standMat);
-    top.position.set(0, 1.0, 0.02);
-    top.rotation.x = 0.5;
-    const card = new THREE.Mesh(
-      plane(0.58, 0.41),
-      std({
-        map: tex(standTop(room, fonts)),
-        roughness: 0.6,
-        emissive: 0xffffff,
-        emissiveIntensity: 0.15,
-      }),
-    );
-    card.position.set(0, 1.0 + 0.018 * Math.cos(0.5), 0.02 + 0.018 * Math.sin(0.5));
-    card.rotation.x = -Math.PI / 2 + 0.5;
-    (card.material as THREE.MeshStandardMaterial).emissiveMap = (
-      card.material as THREE.MeshStandardMaterial
-    ).map;
-    stand.add(post, top, card);
-    const hit = new THREE.Mesh(box(0.8, 1.3, 0.8), hidden);
-    hit.position.y = 0.65;
-    hit.userData.focus = { kind: "room", room } satisfies Focus;
-    stand.add(hit);
-    pickables.push(hit);
-    scene.add(stand);
-    addShadow(c.x, c.z, 0.9, 0.9);
-  }
-
-  // The floor's name on the lift lobby's side wall.
-  const bayWall = plan.rooms[0]?.x ?? plan.lounge.x;
-  lettering(
-    [
-      { text: `Floor ${plan.floor.level}`, size: 44, weight: 600 },
-      { text: plan.floor.name, size: 120, weight: 800, font: "display" },
-      { text: plan.floor.tagline, size: 38, weight: 400 },
-    ],
-    4.6,
-    (m) => {
-      m.rotation.y = -Math.PI / 2;
-      m.position.set(bayWall - 1 - 0.004, 2.3, ROW.roomTop + 3.4);
-    },
-  );
-
-  // ── The lift ───────────────────────────────────────────────────────────
-  const steel = std({ color: 0xb9bec4, metalness: 0.9, roughness: 0.28 });
-  // Oak-panelled inside, warm under its own light: where every visit begins.
-  // No wall on the door side (box face +z), so the open doors show the floor outside.
-  const cabWood = std({ map: woodTex, color: 0xc9a77c, roughness: 0.45, side: THREE.BackSide });
-  const cab = new THREE.Mesh(box(opening.x1 - opening.x0, opening.h, 1.4), [
-    cabWood,
-    cabWood,
-    cabWood,
-    cabWood,
-    hidden,
-    cabWood,
-  ]);
-  cab.position.set(lift.x, opening.h / 2, ROW.roomTop - 0.7);
-  scene.add(cab);
-  const cabLight = new THREE.Mesh(plane(1.1, 0.8), glow);
-  cabLight.rotation.x = Math.PI / 2;
-  cabLight.position.set(lift.x, opening.h - 0.01, ROW.roomTop - 0.7);
-  scene.add(cabLight);
-  for (const [x, y, w, h] of [
-    [opening.x0 - 0.04, opening.h / 2, 0.08, opening.h],
-    [opening.x1 + 0.04, opening.h / 2, 0.08, opening.h],
-    [lift.x, opening.h + 0.04, opening.x1 - opening.x0 + 0.16, 0.08],
-  ]) {
-    const m = new THREE.Mesh(box(w, h, 0.05), steel);
-    m.position.set(x, y, ROW.roomTop + 0.02);
-    scene.add(m);
-  }
-  const doorGeo = box((opening.x1 - opening.x0) / 2, opening.h, 0.04);
-  const leftDoor = new THREE.Mesh(doorGeo, steel);
-  const rightDoor = new THREE.Mesh(doorGeo, steel);
-  leftDoor.position.set(lift.x - 0.4, opening.h / 2, ROW.roomTop - 0.03);
-  rightDoor.position.set(lift.x + 0.4, opening.h / 2, ROW.roomTop - 0.03);
-  // The seam where the doors meet, and a brass handrail at the back of the car.
-  const seam = new THREE.Mesh(box(0.012, opening.h, 0.05), railMat);
-  seam.position.set(0.4, 0, 0);
-  leftDoor.add(seam);
-  const handrail = new THREE.Mesh(box(opening.x1 - opening.x0 - 0.2, 0.04, 0.04), giltMat);
-  handrail.position.set(lift.x, 0.95, ROW.roomTop - 1.36);
-  scene.add(leftDoor, rightDoor, handrail);
-  const indicator = new THREE.Mesh(
-    plane(0.5, 0.19),
-    basic({ map: tex(floorIndicator(plan.floor.level, fonts)), toneMapped: false }),
-  );
-  indicator.position.set(lift.x, opening.h + 0.35, ROW.roomTop + 0.006);
-  const button = new THREE.Mesh(box(0.12, 0.24, 0.02), steel);
-  button.position.set(opening.x1 + 0.35, 1.15, ROW.roomTop + 0.01);
-  const buttonLight = new THREE.Mesh(
-    keep(new THREE.CircleGeometry(0.025, 16)),
-    basic({ color: 0xffb347, toneMapped: false }),
-  );
-  buttonLight.position.set(opening.x1 + 0.35, 1.18, ROW.roomTop + 0.022);
-  scene.add(indicator, button, buttonLight);
-  const liftHit = new THREE.Mesh(box(2.2, 2.9, 0.3), hidden);
-  liftHit.position.set(lift.x, 1.45, ROW.roomTop);
-  liftHit.userData.focus = { kind: "elevator" } satisfies Focus;
-  scene.add(liftHit);
-  pickables.push(liftHit);
-  let doorsOpen = 0;
-
-  // ── Lounge: windows and sofas ──────────────────────────────────────────
-  {
-    const x0 = plan.lounge.x + 1;
-    const w = plan.lounge.w - 2;
-    const view = new THREE.Mesh(
-      plane(w, 3.1),
-      basic({ map: tex(windowView(w)), toneMapped: false }),
-    );
-    view.position.set(x0 + w / 2, 0.55 + 1.55, ROW.roomTop + 0.008);
-    scene.add(view);
-    const mullion = std({ color: 0x2a2a2a, roughness: 0.4, metalness: 0.6 });
-    const panes = Math.max(2, Math.round(w / 1.6));
-    for (let i = 0; i <= panes; i++) {
-      const m = new THREE.Mesh(box(0.06, 3.14, 0.06), mullion);
-      m.position.set(x0 + (i * w) / panes, 2.1, ROW.roomTop + 0.03);
-      scene.add(m);
-    }
-    for (const y of [0.55, 3.65]) {
-      const m = new THREE.Mesh(box(w + 0.06, 0.07, 0.1), mullion);
-      m.position.set(x0 + w / 2, y, ROW.roomTop + 0.05);
-      scene.add(m);
-    }
-  }
-
-  // ── Benches, sofas and plants ──────────────────────────────────────────
-  const oak = std({ map: woodTex, color: 0xd9c2a0, roughness: 0.5 });
-  const legMat = std({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.6 });
-  const leather = std({ color: dark ? 0x5b3d2c : 0x4a4038, roughness: 0.7 });
-  for (let y = 0; y < plan.rows; y++) {
-    for (let x = 0; x < plan.cols; x++) {
-      if (tileAt(plan, x, y) !== Tile.Bench || tileAt(plan, x - 1, y) === Tile.Bench) continue;
-      let len = 1;
-      while (tileAt(plan, x + len, y) === Tile.Bench) len++;
-      const cx = x + len / 2;
-      const cz = y + 0.5;
-      if (x >= plan.lounge.x) {
-        // Sofa, facing the windows.
-        const seat = new THREE.Mesh(box(len - 0.1, 0.42, 0.82), leather);
-        seat.position.set(cx, 0.21, cz);
-        const back = new THREE.Mesh(box(len - 0.1, 0.42, 0.18), leather);
-        back.position.set(cx, 0.6, cz + 0.32);
-        scene.add(seat, back);
-        for (const s of [-1, 1]) {
-          const arm = new THREE.Mesh(box(0.16, 0.6, 0.82), leather);
-          arm.position.set(cx + s * (len / 2 - 0.13), 0.3, cz);
-          scene.add(arm);
-        }
-        addShadow(cx, cz, len + 0.5, 1.4);
-      } else {
-        const seat = new THREE.Mesh(box(len - 0.2, 0.06, 0.48), oak);
-        seat.position.set(cx, 0.45, cz);
-        scene.add(seat);
-        for (const s of [-1, 1]) {
-          const leg = new THREE.Mesh(box(0.05, 0.42, 0.42), legMat);
-          leg.position.set(cx + s * (len / 2 - 0.3), 0.21, cz);
-          scene.add(leg);
-        }
-        addShadow(cx, cz, len + 0.3, 1);
-      }
-    }
-  }
-
-  const pot = std({ color: 0xe8e2d8, roughness: 0.8 });
-  const potGeo = keep(new THREE.CylinderGeometry(0.22, 0.17, 0.46, 20));
-  const leafGeo = keep(new THREE.IcosahedronGeometry(1, 0));
-  const leaves = [0x2f5a32, 0x3f7240, 0x264a2a, 0x4d8248].map((c) =>
-    std({ color: c, roughness: 0.75, flatShading: true }),
-  );
-  for (let y = 0; y < plan.rows; y++) {
-    for (let x = 0; x < plan.cols; x++) {
-      if (tileAt(plan, x, y) !== Tile.Plant) continue;
-      const rand = seededRandom(x * 31 + y * 7);
-      const m = new THREE.Mesh(potGeo, pot);
-      m.position.set(x + 0.5, 0.23, y + 0.5);
-      scene.add(m);
-      for (let i = 0; i < 8; i++) {
-        const leaf = new THREE.Mesh(leafGeo, leaves[i % leaves.length]);
-        const s = 0.16 + rand() * 0.16;
-        leaf.scale.set(s, s * 1.3, s);
-        leaf.position.set(
-          x + 0.5 + (rand() - 0.5) * 0.4,
-          0.62 + rand() * 0.9,
-          y + 0.5 + (rand() - 0.5) * 0.4,
-        );
-        leaf.rotation.set(rand() * 3, rand() * 3, rand() * 3);
-        scene.add(leaf);
-      }
-      addShadow(x + 0.5, y + 0.5, 0.9, 0.9);
-    }
-  }
-
-  // ── The visitor, seen when the camera pulls back ──────────────────────
-  const avatar = new THREE.Group();
-  const coat = std({ color: 0xff2e63, roughness: 0.7 });
-  const trousers = std({ color: 0x24252b, roughness: 0.8 });
-  const skin = std({ color: 0xe0b48f, roughness: 0.65 });
-  const hair = std({ color: 0x2b211b, roughness: 0.9 });
-  const limb = (r: number, len: number, mat: THREE.Material, x: number, top: number) => {
-    // Pivot at the top, so legs and arms swing from the hip and shoulder.
-    const pivot = new THREE.Group();
-    pivot.position.set(x, top, 0);
-    const m = new THREE.Mesh(keep(new THREE.CapsuleGeometry(r, len, 4, 12)), mat);
-    m.position.y = -len / 2 - r / 2;
-    pivot.add(m);
-    return pivot;
-  };
-  const body = new THREE.Group();
-  const torso = new THREE.Mesh(keep(new THREE.CapsuleGeometry(0.19, 0.42, 6, 16)), coat);
-  torso.position.y = 1.08;
-  torso.scale.z = 0.72;
-  const headMesh = new THREE.Mesh(keep(new THREE.SphereGeometry(0.13, 24, 16)), skin);
-  headMesh.position.y = 1.56;
-  const hairMesh = new THREE.Mesh(
-    keep(new THREE.SphereGeometry(0.137, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55)),
-    hair,
-  );
-  hairMesh.position.set(0, 1.575, 0.012);
-  hairMesh.rotation.x = 0.35;
-  const limbs = {
-    body,
-    legL: limb(0.075, 0.62, trousers, -0.095, 0.86),
-    legR: limb(0.075, 0.62, trousers, 0.095, 0.86),
-    armL: limb(0.055, 0.46, coat, -0.225, 1.36),
-    armR: limb(0.055, 0.46, coat, 0.225, 1.36),
-  };
-  body.add(torso, headMesh, hairMesh, limbs.armL, limbs.armR);
-  avatar.add(body, limbs.legL, limbs.legR);
-  const avatarShadow = new THREE.Mesh(plane(0.8, 0.8), shadowMat);
-  avatarShadow.rotation.x = -Math.PI / 2;
-  avatarShadow.position.y = 0.006;
-  avatar.add(avatarShadow);
-  avatar.visible = false;
-  scene.add(avatar);
-
-  // ── Dust in the light ──────────────────────────────────────────────────
-  const dustSeeds: {
-    x: number;
-    y: number;
-    z: number;
-    speed: number;
-    phase: number;
-    rise: number;
-  }[] = [];
-  {
-    const rand = seededRandom(91);
-    for (const room of plan.rooms) {
-      for (let i = 0; i < 70; i++) {
-        dustSeeds.push({
-          x: room.x + 1 + rand() * (room.w - 2),
-          y: rand() * CEILING,
-          z: ROW.roomTop + 0.6 + rand() * (ROW.roomBottom - ROW.roomTop),
-          speed: 0.05 + rand() * 0.12,
-          phase: rand() * 7,
-          rise: 0.006 + rand() * 0.014,
+      case "facade-glass":
+        return basic({ color: outdoor("#46586a"), transparent: true, opacity: 0.78 });
+      case "facade-trim":
+        return basic({ color: outdoor("#d4d0c8"), vertexColors: true });
+      case "roof":
+        return basic({ color: outdoor("#8e8b85") });
+      case "floor": {
+        const surface = arg as "wood" | "stone" | "deck" | "street";
+        const map =
+          surface === "wood"
+            ? texOnce("wood", woodFloor, { repeat: true })
+            : surface === "stone"
+              ? texOnce("stone", stoneFloor, { repeat: true })
+              : surface === "deck"
+                ? texOnce("deck", deck, { repeat: true })
+                : texOnce("pavement", pavement, { repeat: true });
+        const out = surface === "deck" || surface === "street";
+        return std({
+          map,
+          roughness: surface === "stone" ? 0.28 : surface === "wood" ? 0.42 : 0.85,
+          envMapIntensity: surface === "stone" ? 1.1 : 0.8,
+          emissive: out ? "#ffffff" : "#000000",
+          emissiveMap: out ? map : null,
+          emissiveIntensity: out ? 0.35 : 0,
         });
       }
+      case "stair-oak":
+        return std({ map: texOnce("wood", woodFloor, { repeat: true }), color: "#f0dcc0", roughness: 0.45 });
+      case "oak":
+        return std({ map: texOnce("wood", woodFloor, { repeat: true }), color: "#e3cba6", roughness: 0.5 });
+      case "oak-dark":
+        return std({ map: texOnce("wood", woodFloor, { repeat: true }), color: "#7a5a40", roughness: 0.5 });
+      case "black":
+        return std({ color: "#1c1c1c", roughness: 0.5, metalness: 0.3 });
+      case "steel":
+        return std({ color: "#b9bec4", metalness: 0.9, roughness: 0.3 });
+      case "door-steel":
+        return std({ color: "#c9cdd2", metalness: 0.85, roughness: 0.35 });
+      case "brass":
+        return std({ color: "#b08d4a", metalness: 0.85, roughness: 0.35 });
+      case "chrome":
+        return std({ color: "#eef0f2", metalness: 1, roughness: 0.06, envMapIntensity: 1.6 });
+      case "gilt":
+        return std({ color: "#a88645", metalness: 0.8, roughness: 0.38 });
+      case "frame-black":
+        return std({ color: "#141414", metalness: 0.1, roughness: 0.45 });
+      case "frame-thin":
+        return std({ color: "#1d1a17", metalness: 0.05, roughness: 0.55 });
+      case "mat-board":
+        return std({ color: "#f4f1ea", roughness: 0.95 });
+      case "label-blank":
+        return std({ color: "#f7f4ee", roughness: 0.9 });
+      case "hidden":
+        return basic({ visible: false });
+      case "pool":
+        return basic({ map: texOnce("pool", lightPool, { color: false }) });
+      case "shadow":
+      case "shadow-soft":
+        return basic({
+          map: texOnce("shadow", contactShadow, { color: false }),
+          transparent: true,
+          opacity: kind === "shadow" ? 1 : 0.55,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        });
+      case "leather":
+        return std({ color: "#4a3a30", roughness: 0.6 });
+      case "fabric":
+        return std({ color: "#7d827f", roughness: 0.95 });
+      case "cushion-a":
+        return std({ color: "#c8553a", roughness: 0.95 });
+      case "cushion-b":
+        return std({ color: "#2f4f6f", roughness: 0.95 });
+      case "pot":
+        return std({ color: "#e8e2d8", roughness: 0.8 });
+      case "bark":
+        return std({ color: "#4b3a2c", roughness: 0.95 });
+      case "tree-grate":
+        return std({ color: "#2a2a2a", roughness: 0.6, metalness: 0.5 });
+      case "corian":
+        return std({ color: "#f2f0eb", roughness: 0.35 });
+      case "chair":
+        return std({ color: "#2b2b2b", roughness: 0.6 });
+      case "cup":
+        return std({ color: "#ffffff", roughness: 0.3 });
+      case "pastry-a":
+        return std({ color: "#c98b4a", roughness: 0.8 });
+      case "pastry-b":
+        return std({ color: "#e3c27a", roughness: 0.8 });
+      case "pendant":
+        return std({ color: "#1e1e1e", roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide });
+      case "lamp-green":
+        return std({ color: "#1f5c3a", roughness: 0.4, emissive: "#2a5a3a", emissiveIntensity: 0.4 });
+      case "screen":
+        return basic({ color: ["#3a6df0", "#ff2e63", "#f6c500"][Number(arg) || 0], toneMapped: false });
+      case "op-disc": {
+        const t = texOnce("op-disc", () => {
+          const c = document.createElement("canvas");
+          c.width = c.height = 256;
+          const ctx = c.getContext("2d")!;
+          for (let r = 128; r > 0; r -= 8) {
+            ctx.fillStyle = (r / 8) % 2 ? "#111" : "#f4f4f4";
+            ctx.beginPath();
+            ctx.arc(128 + (128 - r) * 0.15, 128, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          return c;
+        });
+        return std({ map: t, roughness: 0.4 });
+      }
+      case "op-grid": {
+        const t = texOnce("op-grid", () => {
+          const c = document.createElement("canvas");
+          c.width = c.height = 256;
+          const ctx = c.getContext("2d")!;
+          for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) {
+            ctx.fillStyle = (i + j) % 2 ? "#111" : "#f4f4f4";
+            const s = 16 * (1 + 0.3 * Math.sin((i + j) / 3));
+            ctx.fillRect(i * 16, j * 16, s, s);
+          }
+          return c;
+        });
+        return std({ map: t, roughness: 0.4 });
+      }
+      case "stone-block":
+        return std({ color: "#8b8478", roughness: 0.95, flatShading: true });
+      case "corten":
+        return std({ color: "#7a3b1e", roughness: 0.85, emissive: "#3a1a0c", emissiveIntensity: 0.25 });
+      case "concrete":
+        return std({ color: "#b3ada3", roughness: 0.95 });
+      case "soil":
+        return std({ color: "#3b2f25", roughness: 1 });
+      case "planter":
+        return std({ color: "#9c968c", roughness: 0.95 });
+      case "green-wall": {
+        const t = texOnce("green", livingWall, { repeat: true });
+        return std({ map: t, roughness: 0.9, emissive: "#ffffff", emissiveMap: t, emissiveIntensity: 0.25, vertexColors: true });
+      }
+      case "ground":
+        return basic({ color: outdoor("#8a857c") });
+      case "pavement": {
+        const t = texOnce("pavement", pavement, { repeat: true });
+        return basic({ map: t, color: outdoor("#e6e2da") });
+      }
+      case "asphalt": {
+        const t = texOnce("asphalt", asphalt, { repeat: true });
+        return basic({ map: t, color: outdoor("#c8c8c8") });
+      }
+      case "curb":
+        return basic({ color: outdoor("#bdb8ae") });
+      case "road-paint":
+        return basic({ color: outdoor("#e9e5da") });
+      case "city": {
+        const t = texOnce(`city:${arg}`, () => cityWindows(Number(arg)), { repeat: true });
+        return basic({ map: t, color: outdoor("#ffffff"), vertexColors: true });
+      }
+      case "city-roof":
+        return basic({ color: outdoor("#7a7772"), vertexColors: true });
+      case "skyline": {
+        const t = texOnce("skyline", skyline);
+        t.wrapS = THREE.RepeatWrapping;
+        t.repeat.set(3, 1);
+        return basic({ map: t, transparent: true, side: THREE.BackSide, depthWrite: false, fog: false });
+      }
+      case "awning":
+        return basic({ color: outdoor(["#2f4d3a", "#7a2e2e", "#1f2a3a"][Number(arg) || 0]) });
+      case "car":
+        return std({ color: arg, metalness: 0.6, roughness: 0.3, envMapIntensity: 1.2, emissive: arg, emissiveIntensity: 0.25 });
+      case "car-glass":
+        return std({ color: "#1e2328", metalness: 0.8, roughness: 0.1 });
+      case "tyre":
+        return std({ color: "#151515", roughness: 0.9 });
+      case "tail":
+        return basic({ color: "#c0262d" });
+      case "person":
+        return std({ color: arg, roughness: 0.75 });
+      case "sun": {
+        const [cols, t] = arg.split(":").map(Number);
+        const map = texOnce(`sun:${arg}`, () => sunThroughGlass(cols, t / 20), { color: true });
+        return basic({
+          map,
+          transparent: true,
+          opacity: 0.32 * Math.min(1, sun.y * 2),
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+        });
+      }
+      default: {
+        if (kind.startsWith("leaf") || kind.startsWith("tree-leaf")) {
+          const greens = ["#2f5a32", "#3f7240", "#264a2a", "#4d8248"];
+          const c = greens[Number(kind.split("-").pop()) % greens.length];
+          return std({
+            color: c,
+            roughness: 0.8,
+            flatShading: true,
+            emissive: kind.startsWith("tree") ? c : "#000000",
+            emissiveIntensity: kind.startsWith("tree") ? 0.35 : 0,
+          });
+        }
+        if (kind.startsWith("book-")) {
+          return std({ color: ["#c8442f", "#1f4e79", "#e5d8b8", "#2f6b4f", "#111111"][Number(kind.slice(5)) % 5], roughness: 0.7 });
+        }
+        if (kind.startsWith("books-")) {
+          const v = Number(kind.slice(6));
+          return std({ map: texOnce(`books:${v}`, () => bookSpines(v), { repeat: true }), roughness: 0.8 });
+        }
+        if (kind.startsWith("screen-")) {
+          return basic({ color: ["#3a6df0", "#ff2e63", "#f6c500"][Number(kind.slice(7)) % 3], toneMapped: false });
+        }
+        if (kind.startsWith("awning-")) {
+          return basic({ color: outdoor(["#2f4d3a", "#7a2e2e", "#1f2a3a"][Number(kind.slice(7)) % 3]) });
+        }
+        return std({ color: "#ff00ff" });
+      }
     }
-  }
-  const dustGeo = keep(new THREE.BufferGeometry());
-  dustGeo.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(new Float32Array(dustSeeds.length * 3), 3),
-  );
-  const motes = new THREE.Points(
-    dustGeo,
-    keep(
-      new THREE.PointsMaterial({
-        map: poolTex,
-        color: 0xfff1d6,
-        size: 0.035,
-        transparent: true,
-        opacity: dark ? 0.55 : 0.35,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    ),
-  );
-  motes.frustumCulled = false;
-  scene.add(motes);
+  };
+  const mat = (key: string) => {
+    let m = materials.get(key);
+    if (!m) materials.set(key, (m = make(key)));
+    return m;
+  };
 
-  // ── Walk-to marker ─────────────────────────────────────────────────────
+  // ── Build ──
+  const levels = b.levels.map(() => new THREE.Group());
+  const shared = new THREE.Group();
+  scene.add(...levels, shared);
+  const pickables: THREE.Object3D[] = [];
+  const k: Kit = { mat, tex, keep, levels, shared, pickables, sun, low };
+
+  const arch: Architecture = buildArchitecture(k, b);
+  const furnishing: Furnishing = buildFurnishing(k, b, fonts);
+  const city: City = buildCity(k, b, { top: skyTop, horizon: skyHorizon });
+  const crowd: Crowd = buildCrowd(k, b);
+  const self: Figure = buildSelf(k);
+  // Walls and ceilings stop a click from reaching floors behind them.
+  for (const g of levels) {
+    g.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = o.material as THREE.Material;
+      if ([...materials.entries()].some(([key, v]) => v === m && /^(plaster|slab|ceiling|stair-oak)/.test(key))) pickables.push(o);
+    });
+  }
+  shared.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const m = o.material as THREE.Material;
+    if (m === materials.get("stair-oak")) {
+      o.userData.stairs = true;
+      pickables.push(o);
+    }
+    if (m === materials.get("facade") || m === materials.get(`plaster:#f3f1ec`)) pickables.push(o);
+  });
+
+  // ── Walk-to marker ──
   const marker = new THREE.Mesh(
     keep(new THREE.RingGeometry(0.16, 0.22, 40)),
     basic({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false }),
@@ -864,9 +459,58 @@ export function createMuseumScene(
   marker.visible = false;
   scene.add(marker);
 
+  // ── Dust in the light ──
+  const dustSeeds: { x: number; y: number; z: number; speed: number; phase: number; rise: number }[] = [];
+  {
+    let s = 91;
+    const r = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+    for (let i = 0; i < (low ? 300 : 700); i++) {
+      dustSeeds.push({
+        x: b.oculus.x + (r() - 0.5) * b.oculus.r * 1.6,
+        y: r() * b.roofY,
+        z: b.oculus.z + (r() - 0.5) * b.oculus.r * 1.6,
+        speed: 0.05 + r() * 0.12,
+        phase: r() * 7,
+        rise: 0.01 + r() * 0.03,
+      });
+    }
+  }
+  const dustGeo = keep(new THREE.BufferGeometry());
+  dustGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(dustSeeds.length * 3), 3));
+  const motes = new THREE.Points(
+    dustGeo,
+    keep(
+      new THREE.PointsMaterial({
+        map: (mat("pool") as THREE.MeshBasicMaterial).map,
+        color: 0xfff1d6,
+        size: 0.05,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    ),
+  );
+  motes.frustumCulled = false;
+  scene.add(motes);
+
   const raycaster = new THREE.Raycaster();
   let baseFov = 66;
   const ndc = new THREE.Vector2();
+  let exposure = 1;
+  let entranceOpen = 0;
+  let shownLevel = -1;
+  let wideOpen = true;
+  const artGroups = levels.map((g) => g.children.find((c) => c.userData.art));
+  const near = new Set<number>();
+
+  /** Out in the open (the atrium, the lobby, the terrace, the street): every floor may be in view. */
+  const openView = (s: ViewState, cam: THREE.Vector3) => {
+    if (s.riding) return true;
+    if (stairAt(b, s.at.level, s.at.pos)) return true;
+    const space = spaceAt(b.levels[s.at.level], { x: cam.x, z: cam.z });
+    return !space || ["ring", "lobby", "terrace", "lounge", "outside"].includes(space.kind);
+  };
 
   return {
     resize(width, height, dpr) {
@@ -880,46 +524,54 @@ export function createMuseumScene(
     },
 
     render(s) {
+      const level = b.levels[s.at.level];
       // Through the visitor's eyes, or pulled back behind them, never through a wall.
       const f = forward(s.yaw);
-      const back = {
-        x: -f.x * Math.cos(s.pitch),
-        y: -Math.sin(s.pitch),
-        z: -f.z * Math.cos(s.pitch),
-      };
-      const head = { x: s.pos.x, y: s.zoom > 0 ? AVATAR_HEAD : s.eye, z: s.pos.z };
-      // Back out step by step, stopping at the first wall, so the camera never hops one.
-      const cameraAt = (dist: number) => ({ x: head.x + back.x * dist, z: head.z + back.z * dist });
+      const back = { x: -f.x * Math.cos(s.pitch), y: -Math.sin(s.pitch), z: -f.z * Math.cos(s.pitch) };
+      const headY = s.ground + (s.zoom > 0 ? 2.05 : s.eye);
+      const ceiling = level.y + level.ceiling - 0.15;
       let d = 0;
-      while (
-        d + 0.05 <= s.zoom &&
-        !collides(plan, cameraAt(d + 0.05), 0.15) &&
-        head.y + back.y * (d + 0.05) < CEILING - 0.15
-      ) {
+      while (d + 0.05 <= s.zoom) {
+        const p = { x: s.at.pos.x + back.x * (d + 0.05), z: s.at.pos.z + back.z * (d + 0.05) };
+        const y = headY + back.y * (d + 0.05);
+        const underCeiling = spaceAt(level, p)?.kind !== "terrace" && spaceAt(level, p)?.kind !== "outside";
+        if (collides(b, s.at.level, p, 0.15) && !stairAt(b, s.at.level, p)) break;
+        if (underCeiling && y > ceiling && !inRect(b.atrium, p)) break;
         d += 0.05;
       }
-      camera.position.set(
-        head.x + back.x * d,
-        Math.max(0.3, head.y + back.y * d),
-        head.z + back.z * d,
-      );
+      camera.position.set(s.at.pos.x + back.x * d, Math.max(s.ground + 0.3, headY + back.y * d), s.at.pos.z + back.z * d);
       camera.rotation.set(s.pitch, s.yaw, 0);
 
-      avatar.visible = d > 0.45;
-      if (avatar.visible) {
-        avatar.position.set(s.pos.x, 0, s.pos.z);
-        avatar.rotation.y = s.yaw;
-        const swing = Math.sin(s.stride * 4.2) * 0.55 * s.pace;
-        limbs.legL.rotation.x = swing;
-        limbs.legR.rotation.x = -swing;
-        limbs.armL.rotation.x = -swing * 0.8;
-        limbs.armR.rotation.x = swing * 0.8;
-        limbs.body.position.y = Math.abs(Math.cos(s.stride * 4.2)) * 0.03 * s.pace;
+      // The visitor's own body, when the camera steps back.
+      self.root.visible = d > 0.45;
+      if (self.root.visible) {
+        self.root.position.set(s.at.pos.x, s.ground, s.at.pos.z);
+        self.root.rotation.y = s.yaw;
+        pose(self, s.stride, s.pace);
       }
 
-      // Lift doors slide open as you come near.
-      const near = Math.hypot(s.pos.x - lift.x, s.pos.z - lift.z) < 2.4 ? 1 : 0;
-      doorsOpen += ((s.lift ?? near) - doorsOpen) * 0.06;
+      // Which floors to draw: the one you're on and its neighbours, or all of them out in the open.
+      const open = openView(s, camera.position);
+      if (s.at.level !== shownLevel || open !== wideOpen) {
+        shownLevel = s.at.level;
+        wideOpen = open;
+        near.clear();
+        for (const g of levels.keys()) {
+          const show = open || Math.abs(g - s.at.level) <= 1;
+          levels[g].visible = show;
+          const art = artGroups[g];
+          if (art) art.visible = Math.abs(g - s.at.level) <= 1;
+          if (show) near.add(g);
+        }
+        // Pictures for the floor you're on and the ones either side.
+        for (const i of [s.at.level, s.at.level + 1, s.at.level - 1]) if (i >= 0 && i < b.levels.length) furnishing.loadLevel(i);
+      }
+
+      // Eyes adjust: bright outside, a little brighter in the galleries.
+      const space = spaceAt(level, s.at.pos);
+      const want = !space ? 0.95 : space.kind === "outside" ? 0.72 : space.kind === "terrace" ? 0.8 : space.kind === "lobby" ? 0.93 : 1.04;
+      exposure += (want - exposure) * Math.min(1, s.dt * 1.5);
+      renderer.toneMappingExposure = exposure;
 
       const fov = baseFov + s.rush * 5;
       if (Math.abs(camera.fov - fov) > 0.01) {
@@ -927,50 +579,31 @@ export function createMuseumScene(
         camera.updateProjectionMatrix();
       }
 
-      // Dust turning slowly in the skylights' light.
+      arch.lift.update(s.lift.y, s.lift.at, s.lift.open);
+      // The front doors open for anyone near them, inside or out.
+      const doors = b.entrance.doors;
+      const toDoors = s.at.level === 0 ? Math.hypot(s.at.pos.x - (doors.x0 + doors.x1) / 2, s.at.pos.z - doors.z) : 99;
+      entranceOpen += ((toDoors < 3.2 ? 1 : 0) - entranceOpen) * Math.min(1, s.dt * 3);
+      arch.entrance(entranceOpen);
+      arch.beam.rotation.y = s.time * 0.01;
+
+      furnishing.update({ pos: s.at.pos, focusId: s.focusId, hoverId: s.hoverId });
+      city.update(s.time, s.dt, camera.position);
+      crowd.update(s.dt, s.at, (l) => levels[l].visible, s.at.pos);
+
+      // Dust turning slowly in the oculus's light.
       const dust = dustGeo.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < dustSeeds.length; i++) {
-        const d = dustSeeds[i];
-        const t = s.time * d.speed + d.phase;
-        dust.setXYZ(
-          i,
-          d.x + Math.sin(t) * 0.35,
-          0.4 + ((d.y + s.time * d.rise) % (CEILING - 0.8)),
-          d.z + Math.cos(t * 0.8) * 0.35,
-        );
+        const m = dustSeeds[i];
+        const t = s.time * m.speed + m.phase;
+        dust.setXYZ(i, m.x + Math.sin(t) * 0.6, 0.4 + ((m.y + s.time * m.rise) % (b.roofY - 1)), m.z + Math.cos(t * 0.8) * 0.6);
       }
       dust.needsUpdate = true;
-      const slide = doorsOpen * 0.78;
-      leftDoor.position.x = lift.x - 0.4 - slide;
-      rightDoor.position.x = lift.x + 0.4 + slide;
-
-      for (const h of hung) {
-        const lit = h.id === s.focusId ? 1 : h.id === s.hoverId ? 0.6 : 0;
-        h.pool.opacity += ((dark ? 0.26 : 0.16) + lit * 0.22 - h.pool.opacity) * 0.15;
-        h.canvas.emissiveIntensity += (0.16 + lit * 0.14 - h.canvas.emissiveIntensity) * 0.15;
-        if (h.views && h.art) {
-          const v = lenticularView(h.art, h.views.textures.length, s.pos.x);
-          const i0 = Math.floor(v);
-          const i1 = Math.min(h.views.textures.length - 1, i0 + 1);
-          const t0 = h.views.textures[i0];
-          const t1 = h.views.textures[i1];
-          if (t0 && h.canvas.map !== t0) setImage(h.canvas, t0);
-          const over = h.views.over;
-          if (t1 && over.map !== t1) {
-            over.map = t1;
-            over.emissiveMap = t1;
-            over.needsUpdate = true;
-          }
-          // Hold each view, then turn over quickly, like the folds of the real thing.
-          const f = v - i0;
-          over.opacity = t1 ? Math.min(1, Math.max(0, (f - 0.3) / 0.4)) : 0;
-          over.emissiveIntensity = h.canvas.emissiveIntensity;
-        }
-      }
 
       if (s.marker) {
         marker.visible = true;
-        marker.position.set(s.marker.x, 0.012, s.marker.z);
+        const y = b.levels[s.marker.level].y;
+        marker.position.set(s.marker.pos.x, y + 0.015, s.marker.pos.z);
         const pulse = 1 + Math.sin(s.time * 6) * 0.08;
         marker.scale.set(pulse, pulse, pulse);
       } else marker.visible = false;
@@ -981,17 +614,45 @@ export function createMuseumScene(
     pick(x, y) {
       ndc.set(x, y);
       raycaster.setFromCamera(ndc, camera);
-      const hit = raycaster.intersectObjects(pickables, false)[0];
-      if (!hit) return null;
-      const focus = hit.object.userData.focus as Focus | undefined;
-      if (focus) return { focus };
-      if (hit.object.userData.floor) return { floor: { x: hit.point.x, z: hit.point.z } };
+      const hits = raycaster.intersectObjects(pickables, false);
+      for (const hit of hits) {
+        // Only what's drawn.
+        let o: THREE.Object3D | null = hit.object;
+        let shown = true;
+        while (o) {
+          if (!o.visible && !(o as THREE.Mesh).userData.focus) shown = false;
+          o = o.parent;
+        }
+        if (!shown) continue;
+        const focus = hit.object.userData.focus as Focus | undefined;
+        if (focus) return { focus };
+        if (hit.object.userData.floor !== undefined) {
+          return { place: { level: hit.object.userData.floor as number, pos: { x: hit.point.x, z: hit.point.z } } };
+        }
+        if (hit.object.userData.stairs) {
+          const p = { x: hit.point.x, z: hit.point.z };
+          // Whichever flight this tread belongs to, and which half of it.
+          for (const st of b.stairs) {
+            if (!inRect(st.rect, p, 0.05)) continue;
+            const y0 = b.levels[st.from].y;
+            const y1 = b.levels[st.to].y;
+            if (hit.point.y < y0 - 0.2 || hit.point.y > y1 + 0.2) continue;
+            return { place: { level: stairProgress(st, p) >= 0.5 ? st.to : st.from, pos: p } };
+          }
+        }
+        return null;
+      }
       return null;
     },
 
+    nearestCar: (p) => city.nearestCar(p),
+    obstacles: (lv) => crowd.obstacles(lv),
+
     dispose() {
       for (const t of trash) t.dispose();
+      for (const m of materials.values()) m.dispose();
       renderer.dispose();
     },
   };
 }
+
