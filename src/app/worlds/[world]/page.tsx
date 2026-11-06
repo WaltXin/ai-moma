@@ -6,6 +6,7 @@ import { WallFallback } from "@/components/gallery/wall-fallback";
 import { TEXT_LINK } from "@/components/gallery/wall-parts";
 import { WorldView } from "@/components/worlds/world-view";
 import { getExhibition, getWorld, getWorlds } from "@/lib/museum/registry";
+import { worldRequestUrl } from "@/lib/worlds/request";
 
 export function generateStaticParams() {
   return getWorlds().map((w) => ({ world: w.slug }));
@@ -54,6 +55,17 @@ async function World({ params }: { params: PageProps<"/worlds/[world]">["params"
                 .
               </>
             )}
+          </p>
+          <p className="mt-3">
+            Another painting you&apos;d like to step into?{" "}
+            <a
+              href={worldRequestUrl()}
+              target="_blank"
+              rel="noreferrer"
+              className={`${TEXT_LINK} text-white`}
+            >
+              Request a world<span className="sr-only"> (opens GitHub in a new tab)</span>
+            </a>
           </p>
         </div>
       </section>

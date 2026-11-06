@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getWorlds } from "@/lib/museum/registry";
+import { WORLD_REQUEST_TEMPLATE, worldRequestUrl } from "@/lib/worlds/request";
 import {
   BOUNDS,
   CYPRESS,
@@ -19,6 +21,17 @@ describe("painting worlds", () => {
   it("only lists worlds that have a scene", () => {
     // Each slug needs a scene in src/components/worlds/; add it there first.
     expect(getWorlds().map((w) => w.slug)).toEqual(["starry-night"]);
+  });
+
+  it("asks for a new world on a GitHub form that exists, filled in", () => {
+    expect(existsSync(`.github/ISSUE_TEMPLATE/${WORLD_REQUEST_TEMPLATE}`)).toBe(true);
+    const url = new URL(
+      worldRequestUrl({ title: "The Dance Class", artist: "Edgar Degas", url: "https://x.test/1" }),
+    );
+    expect(url.searchParams.get("template")).toBe(WORLD_REQUEST_TEMPLATE);
+    expect(url.searchParams.get("title")).toBe("World request: The Dance Class, Edgar Degas");
+    expect(url.searchParams.get("painting")).toBe("The Dance Class");
+    expect(url.searchParams.get("link")).toBe("https://x.test/1");
   });
 });
 

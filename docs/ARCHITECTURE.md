@@ -239,6 +239,15 @@ interpretation drawn with code, and the welcome says where the real painting han
 public-domain paintings get a world. A room links to its worlds (`getWorldsForRoom`), and
 `validateMuseum()` checks that each world's movement and room exist.
 
+**Quiet controls.** Sitting, or in full screen, the title and buttons fade after a few seconds
+(2.5 s in full screen, 4 s sitting), and the cursor hides. Moving the mouse, tapping or pressing
+a key that isn't for walking brings them back; dragging to look and walking don't. While hidden
+they can't be pressed, so the first tap only shows them.
+
+**Requests.** Under every public-domain painting in a room, "Request this world" opens the
+`4-world_request.yml` issue form on GitHub, filled in with the painting (`src/lib/worlds/request.ts`),
+so requests are public, can be upvoted, and wait for a contributor to build them.
+
 **Full screen on phones.** Where the browser allows it (Android, desktop, iPad), "Full screen"
 uses the Fullscreen API. iPhone Safari only allows that for video, so there the world covers
 the whole page instead. Added to the home screen (`app/manifest.ts`, `appleWebApp` in the
