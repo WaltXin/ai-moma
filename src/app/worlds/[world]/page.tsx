@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { WallFallback } from "@/components/gallery/wall-fallback";
 import { TEXT_LINK } from "@/components/gallery/wall-parts";
+import { Creators } from "@/components/worlds/creators";
 import { WorldView } from "@/components/worlds/world-view";
 import { getExhibition, getWorld, getWorlds } from "@/lib/museum/registry";
 import { worldRequestUrl } from "@/lib/worlds/request";
@@ -45,7 +46,8 @@ async function World({ params }: { params: PageProps<"/worlds/[world]">["params"
         <div className="mx-auto max-w-6xl px-4 py-6 text-[#c9d4ea] sm:px-6">
           <p>
             An interpretation in 3D of {world.artist}&apos;s {world.title} ({world.year}), drawn
-            with code.{" "}
+            with code by{" "}
+            <Creators creators={world.creators} className={`${TEXT_LINK} text-white`} />.{" "}
             {room && (
               <>
                 Its painter hangs in{" "}

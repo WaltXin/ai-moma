@@ -18,6 +18,9 @@ as people contribute them. Visitors can:
 - 🎨 **Create**: upload a photo or write a prompt and have an AI model render it in a
   movement's style (for example, turn your selfie into a Pop Art silkscreen grid).
 - 🖼 **Exhibit**: submit what you made. Curators review it and hang it in the Community Gallery.
+- 🌌 **Step inside**: walk into a painting and sit in it, starting with _The Starry Night_.
+  Painting worlds are a collaboration between the artist
+  [Liya Tian](https://www.linkedin.com/in/liya-tian), whose idea they are, and Walt Xin.
 
 Some movements need their own way of being seen. A
 [Yaacov Agam](https://en.wikipedia.org/wiki/Yaacov_Agam)-style **Agamograph** changes as you

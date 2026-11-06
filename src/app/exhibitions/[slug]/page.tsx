@@ -18,6 +18,7 @@ import {
 } from "@/components/gallery/wall-parts";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
+import { Creators } from "@/components/worlds/creators";
 import {
   getExhibition,
   getExhibitions,
@@ -131,6 +132,14 @@ function WorldDoor({ world }: { world: PaintingWorld }) {
             After {world.artist}, {world.year}
           </p>
           <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-pretty">{world.intro}</p>
+          <p className="mt-4 text-sm text-[#aebbd8]">
+            A painting world by{" "}
+            <Creators
+              creators={world.creators}
+              className="text-[#e9eefb] underline underline-offset-2"
+            />
+            .
+          </p>
         </div>
         <div className="flex items-end md:col-span-5 md:justify-end">
           <Link

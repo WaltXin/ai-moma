@@ -110,12 +110,14 @@ describe("validateMuseum", () => {
       movement: "nope",
       room: "ghost-room",
       intro: "",
+      creators: [],
     };
     const problems = validateMuseum([movement], [exhibition], [floor], [world]);
     expect(problems).toEqual(
       expect.arrayContaining([
         expect.stringContaining('World "test-world" references unknown movement "nope"'),
         expect.stringContaining('World "test-world" references unknown room "ghost-room"'),
+        expect.stringContaining('World "test-world" credits nobody'),
       ]),
     );
   });
