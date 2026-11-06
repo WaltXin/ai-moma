@@ -15,7 +15,7 @@ import type { WorldScene } from "./starry-night-scene";
  * into the grass and tips your head back, and after a while every control
  * fades away, leaving only the painting. In full screen they fade sooner,
  * sitting or not; move the mouse, tap, or press a key to bring them back. Nothing here can be touched or
- * changed: the other visitors and you are part of its weather.
+ * changed: you are part of its weather.
  *
  * The three.js scene loads on demand, behind a welcome card that says what
  * the painting is and where the real one hangs.

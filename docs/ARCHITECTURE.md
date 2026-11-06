@@ -218,13 +218,13 @@ unmoderated.
 ## Painting worlds
 
 Some paintings can be stepped into: `/worlds/<slug>` raises the painting's place as a small
-world you walk round and sit in, while other visitors stand and sit nearby, part of the scene.
+world you walk round and sit in, alone with it: no made-up visitors wander about.
 Nothing in it can be touched. The idea came from an artist: people love to sit and stare in
 museums, so give a few paintings a place to do that inside them.
 
 ```
 src/content/worlds.ts          PaintingWorld: title, artist, year, where the real one hangs, its room here
-src/lib/worlds/<slug>.ts       the layout as data: ground, sky swirls, stars, village, cypress, where visitors linger
+src/lib/worlds/<slug>.ts       the layout as data: ground, sky swirls, stars, village, cypress
 src/components/worlds/         the scene (three.js), its brushwork (canvas), and WorldView (controls, sit, sound)
 ```
 
