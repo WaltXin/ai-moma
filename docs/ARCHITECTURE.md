@@ -239,6 +239,13 @@ interpretation drawn with code, and the welcome says where the real painting han
 public-domain paintings get a world. A room links to its worlds (`getWorldsForRoom`), and
 `validateMuseum()` checks that each world's movement and room exist.
 
+**Full screen on phones.** Where the browser allows it (Android, desktop, iPad), "Full screen"
+uses the Fullscreen API. iPhone Safari only allows that for video, so there the world covers
+the whole page instead. Added to the home screen (`app/manifest.ts`, `appleWebApp` in the
+root layout), the museum opens with no Safari bars at all. iPhone also silences web audio
+when the ring switch is on silent, so the audio engine asks for a "playback" audio session
+(Safari 16.4+) whenever sound is on.
+
 ## Studio pieces drawn with code
 
 Rooms whose historic works are still under copyright hang original pieces made by recipes in

@@ -42,8 +42,25 @@ export const markEntered = () => {
 /** The running engine, if sound has been started. */
 export const getAudio = () => engine;
 
+/**
+ * On iPhone, Safari silences web audio while the ring/silent switch is on
+ * silent. Asking for a "playback" session (Safari 16.4+) lets the music play
+ * as a music app's would; "auto" hands the choice back when sound is off.
+ */
+function audioSession(playing: boolean) {
+  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  if (!session) return;
+  try {
+    session.type = playing ? "playback" : "auto";
+  } catch {
+    // Older Safari: the switch decides.
+  }
+}
+
 /** Starts (or wakes) the engine. Call from a click or key handler. */
 export function startAudio(): MuseumAudio | null {
+  // Before the context starts, or Safari keeps the ringer's say.
+  audioSession(engine ? !engine.muted : soundPreferred());
   if (!engine) {
     try {
       engine = new MuseumAudio();
@@ -206,7 +223,8 @@ export class MuseumAudio {
     this.score = null;
     this.mood = null;
     const t = this.ctx.currentTime;
-    for (const g of [this.hum, this.murmur, this.street, this.car]) g.gain.setTargetAtTime(0, t, 0.4);
+    for (const g of [this.hum, this.murmur, this.street, this.car])
+      g.gain.setTargetAtTime(0, t, 0.4);
     this.place = "room";
   }
 
@@ -215,6 +233,7 @@ export class MuseumAudio {
     rememberSound(!muted);
     const t = this.ctx.currentTime;
     window.clearTimeout(this.suspendTimer);
+    audioSession(!muted);
     if (muted) {
       this.master.gain.setTargetAtTime(0, t, 0.08);
       this.suspendTimer = window.setTimeout(() => void this.ctx.suspend(), 600);
@@ -232,7 +251,11 @@ export class MuseumAudio {
     if (place === this.place) return;
     this.place = place;
     const t = this.ctx.currentTime;
-    this.reverbOut.gain.setTargetAtTime(place === "outside" ? 0.08 : place === "hall" ? 0.75 : 0.45, t, 0.6);
+    this.reverbOut.gain.setTargetAtTime(
+      place === "outside" ? 0.08 : place === "hall" ? 0.75 : 0.45,
+      t,
+      0.6,
+    );
     this.murmur.gain.setTargetAtTime(place === "hall" ? 0.05 : place === "room" ? 0.012 : 0, t, 1);
     this.street.gain.setTargetAtTime(place === "outside" ? 0.22 : 0.015, t, 0.8);
     this.musicLevel.gain.setTargetAtTime(place === "outside" ? 0.1 : 0.34, t, 1.2);
@@ -244,7 +267,11 @@ export class MuseumAudio {
     const t = this.ctx.currentTime;
     const near = Math.max(0, 1 - dist / 40);
     const through = this.place === "outside" ? 1 : 0.08;
-    this.car.gain.setTargetAtTime(near * near * 0.12 * through * Math.min(1.3, speed / 10), t, 0.08);
+    this.car.gain.setTargetAtTime(
+      near * near * 0.12 * through * Math.min(1.3, speed / 10),
+      t,
+      0.08,
+    );
     this.carPan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.08);
     this.carTone.frequency.setTargetAtTime(500 + near * 700, t, 0.1);
   }
@@ -273,7 +300,9 @@ export class MuseumAudio {
     const env = envelope(ctx, t, level, wood ? 0.1 : 0.065);
     src.connect(band).connect(env);
     env.connect(this.sfx);
-    env.connect(gain(ctx, surface === "street" || surface === "deck" ? 0.02 : wood ? 0.12 : 0.3, this.wet));
+    env.connect(
+      gain(ctx, surface === "street" || surface === "deck" ? 0.02 : wood ? 0.12 : 0.3, this.wet),
+    );
     src.start(t, Math.random() * 1.2, 0.2);
 
     if (wood) {

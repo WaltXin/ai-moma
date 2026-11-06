@@ -28,6 +28,8 @@ export const metadata: Metadata = {
   },
   description:
     "An open-source virtual museum: walk the floors, learn modern art movements, make your own work with AI and exhibit it.",
+  // Added to an iPhone's home screen, the museum opens without Safari's bars.
+  appleWebApp: { capable: true, title: "AI MoMA", statusBarStyle: "black" },
 };
 
 const NAV = [
