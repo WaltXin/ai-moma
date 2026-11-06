@@ -61,8 +61,13 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   const [sound, setSound] = useState(true);
   const [touch, setTouch] = useState(false);
   const [hint, setHint] = useState(true);
-  const [canFullscreen, setCanFullscreen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /**
+   * The page's own stand-in for full screen, where the browser won't give a
+   * page the real thing (iPhone): the world covers the whole page instead.
+   */
+  const [immersive, setImmersive] = useState(false);
+  const covering = fullscreen || immersive;
 
   const game = useRef({
     x: START.x,
@@ -119,7 +124,6 @@ export function WorldView({ world }: { world: PaintingWorld }) {
       const { createStarryNightScene } = await import("./starry-night-scene");
       if (cancelled) return;
       setTouch(coarse);
-      setCanFullscreen(Boolean(document.fullscreenEnabled));
       try {
         scene = createStarryNightScene(canvas, { low: coarse });
       } catch (err) {
@@ -232,6 +236,18 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     };
   }, []);
 
+  // While the world covers the page, the page behind it mustn't scroll.
+  useEffect(() => {
+    if (!immersive) return;
+    const root = document.documentElement;
+    const before = root.style.overflow;
+    root.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    return () => {
+      root.style.overflow = before;
+    };
+  }, [immersive]);
+
   /** The welcome's buttons: start the sound (browsers need a click for it) and go in. */
   const enter = (withSound: boolean) => {
     const audio = startAudio();
@@ -255,8 +271,11 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   };
 
   const toggleFullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void shellRef.current?.requestFullscreen().catch(() => undefined);
+    if (immersive) setImmersive(false);
+    else if (document.fullscreenElement) void document.exitFullscreen();
+    else if (document.fullscreenEnabled && shellRef.current?.requestFullscreen) {
+      void shellRef.current.requestFullscreen().catch(() => setImmersive(true));
+    } else setImmersive(true);
   };
 
   // ── Input ──
@@ -264,6 +283,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     if (!entered) return;
     const key = keyOf(e);
     wake();
+    if (key === "Escape" && immersive) {
+      setImmersive(false);
+      return;
+    }
     if (MOVE_KEYS.has(key)) {
       e.preventDefault();
       game.current.keys.add(key);
@@ -317,7 +340,16 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   };
 
   return (
-    <div ref={shellRef} className={fullscreen ? "h-full w-full bg-black" : undefined}>
+    <div
+      ref={shellRef}
+      className={
+        fullscreen
+          ? "h-full w-full bg-black"
+          : immersive
+            ? "fixed inset-0 z-[100] h-[100dvh] w-full bg-black"
+            : undefined
+      }
+    >
       <div
         ref={containerRef}
         tabIndex={0}
@@ -326,7 +358,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         onBlur={() => game.current.keys.clear()}
         aria-label={`${world.title} in 3D. Use W and S or the up and down arrows to walk, A and D to step sideways, the left and right arrows to turn, and C to sit down or stand up.`}
         className={`relative w-full overflow-hidden bg-[#0e1a3d] outline-none ${
-          fullscreen ? "h-full" : "h-[max(460px,calc(100dvh-4.1rem))]"
+          covering ? "h-full" : "h-[max(460px,calc(100dvh-4.1rem))]"
         } ${quiet ? "cursor-none" : ""}`}
       >
         <canvas
@@ -432,15 +464,13 @@ export function WorldView({ world }: { world: PaintingWorld }) {
               >
                 {sound ? "Sound off" : "Sound on"}
               </button>
-              {canFullscreen && (
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="bg-black/50 px-3 py-2.5 text-sm font-semibold text-white backdrop-blur-sm"
-                >
-                  {fullscreen ? "Exit full screen" : "Full screen"}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="bg-black/50 px-3 py-2.5 text-sm font-semibold text-white backdrop-blur-sm"
+              >
+                {covering ? "Exit full screen" : "Full screen"}
+              </button>
               <Link
                 href={`/exhibitions/${world.room}`}
                 className="inline-flex items-center gap-1.5 bg-black/50 px-3 py-2.5 text-sm font-semibold text-white backdrop-blur-sm"
