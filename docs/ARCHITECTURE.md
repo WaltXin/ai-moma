@@ -219,8 +219,10 @@ unmoderated.
 
 Some paintings can be stepped into: `/worlds/<slug>` raises the painting's place as a small
 world you walk round and sit in, alone with it: no made-up visitors wander about.
-Nothing in it can be touched. The idea came from an artist: people love to sit and stare in
-museums, so give a few paintings a place to do that inside them.
+Nothing in it can be touched. Painting worlds are the idea of the artist
+[Liya Tian](https://www.linkedin.com/in/liya-tian), who makes them with Walt Xin: people love to
+sit and stare in museums, so give a few paintings a place to do that inside them. Each world
+credits its makers (`creators` in `src/content/worlds.ts`) on the way in and under it.
 
 ```
 src/content/worlds.ts          PaintingWorld: title, artist, year, where the real one hangs, its room here

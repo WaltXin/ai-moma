@@ -7,6 +7,7 @@ import { getAudio, startAudio } from "@/components/walk/audio";
 import { Stick } from "@/components/walk/stick";
 import type { PaintingWorld } from "@/lib/museum/types";
 import { NIGHT_MOOD, START, blocked, clampToBounds, heightAt } from "@/lib/worlds/starry-night";
+import { Creators } from "./creators";
 import type { WorldScene } from "./starry-night-scene";
 
 /**
@@ -420,6 +421,9 @@ export function WorldView({ world }: { world: PaintingWorld }) {
               </p>
               <p className="mt-4 leading-relaxed">{world.intro}</p>
               <p className="mt-4 text-sm text-[#5c5c5c]">
+                A painting world by <Creators creators={world.creators} />.
+              </p>
+              <p className="mt-1 text-sm text-[#5c5c5c]">
                 Drawn with code, not copied from a photograph. The painting itself is at{" "}
                 <a
                   href={world.heldBy.url}

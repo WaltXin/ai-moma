@@ -181,6 +181,7 @@ export function validateMuseum(
       problems.push(`World "${w.slug}" references unknown movement "${w.movement}"`);
     if (!exhibitionSlugs.has(w.room))
       problems.push(`World "${w.slug}" references unknown room "${w.room}"`);
+    if (w.creators.length === 0) problems.push(`World "${w.slug}" credits nobody`);
   }
 
   for (const m of movements) {
