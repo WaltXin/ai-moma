@@ -57,18 +57,24 @@ function audioSession(playing: boolean) {
   }
 }
 
-/** Starts (or wakes) the engine. Call from a click or key handler. */
-export function startAudio(): MuseumAudio | null {
+/**
+ * Starts (or wakes) the engine. Call from a click or key handler. Pass
+ * `withSound` when the click says whether the visitor wants sound: the
+ * iPhone's audio session has to be chosen before the context starts, and
+ * an earlier "Sound off" remembered in storage mustn't choose it instead.
+ */
+export function startAudio(withSound?: boolean): MuseumAudio | null {
+  const on = withSound ?? (engine ? !engine.muted : soundPreferred());
   // Before the context starts, or Safari keeps the ringer's say.
-  audioSession(engine ? !engine.muted : soundPreferred());
+  audioSession(on);
   if (!engine) {
     try {
-      engine = new MuseumAudio();
+      engine = new MuseumAudio(!on);
     } catch {
       return null;
     }
   }
-  if (!engine.muted) void engine.ctx.resume();
+  if (on) void engine.ctx.resume();
   return engine;
 }
 
@@ -99,14 +105,14 @@ export class MuseumAudio {
   private mood: Mood | null = null;
   private suspendTimer = 0;
 
-  constructor() {
+  constructor(muted = !soundPreferred()) {
     const Ctx =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctx) throw new Error("No Web Audio");
     this.ctx = new Ctx({ latencyHint: "interactive" });
     const ctx = this.ctx;
-    this.muted = !soundPreferred();
+    this.muted = muted;
 
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = -10;
@@ -199,8 +205,20 @@ export class MuseumAudio {
     // Stop work in a hidden tab, pick up where it left off on return.
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) void ctx.suspend();
-      else if (!this.muted) void ctx.resume();
+      else this.wake();
     });
+    // iPhone stops the sound when the screen locks, a call or another app
+    // takes over, or the tab goes to the background ("interrupted"), and
+    // only lets it start again from a tap or key. So every tap tries.
+    for (const type of ["touchend", "pointerup", "click", "keydown"])
+      document.addEventListener(type, () => this.wake(), { capture: true, passive: true });
+  }
+
+  /** Starts the sound again after the system stopped it, unless the visitor turned it off. */
+  wake() {
+    if (this.muted || document.hidden || (this.ctx.state as string) === "running") return;
+    audioSession(true);
+    void this.ctx.resume();
   }
 
   /** Plays a floor's music, crossfading from whatever was playing. */

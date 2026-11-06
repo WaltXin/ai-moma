@@ -268,7 +268,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
 
   /** The welcome's buttons: start the sound (browsers need a click for it) and go in. */
   const enter = (withSound: boolean) => {
-    const audio = startAudio();
+    const audio = startAudio(withSound);
     audio?.setMuted(!withSound);
     audio?.play(NIGHT_MOOD);
     audio?.setPlace("room");
@@ -279,7 +279,8 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   };
 
   const toggleSound = () => {
-    const audio = startAudio();
+    // Turning sound on picks the audio session before anything plays.
+    const audio = startAudio(getAudio()?.muted);
     if (!audio) return;
     const on = audio.muted;
     audio.setMuted(!on);

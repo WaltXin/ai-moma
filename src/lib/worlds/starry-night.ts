@@ -275,7 +275,8 @@ export const LINGER: Linger[] = [
 
 /** Night music for the hill: slow, low, wide apart, never a quotation of anything. */
 export const NIGHT_MOOD: Mood = {
-  root: 50,
+  // D4: an octave lower sat under what a phone's speaker can play.
+  root: 62,
   scale: [0, 2, 3, 7, 9],
   chords: [
     [0, 2, 4],
@@ -284,7 +285,7 @@ export const NIGHT_MOOD: Mood = {
     [2, 4, 0],
   ],
   beat: 0.62,
-  density: 0.16,
+  density: 0.2,
   brightness: 1300,
   range: [3, 12],
 };
