@@ -330,7 +330,7 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
 
   /** The welcome's buttons: start the sound (a click is what browsers need) and go in. */
   const enter = (withSound: boolean) => {
-    const audio = startAudio();
+    const audio = startAudio(withSound);
     audio?.setMuted(!withSound);
     const g = game.current!;
     audio?.play(moodAt(b, g.at));
@@ -344,7 +344,8 @@ export function WalkableBuilding({ building: b, start }: { building: Building; s
   };
 
   const toggleSound = useCallback(() => {
-    const audio = startAudio();
+    // Turning sound on picks the audio session before anything plays.
+    const audio = startAudio(getAudio()?.muted);
     if (!audio) return;
     const on = audio.muted;
     audio.setMuted(!on);
