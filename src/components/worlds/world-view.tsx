@@ -13,7 +13,8 @@ import type { WorldScene } from "./starry-night-scene";
  * Stepping into a painting. Walk the place with WASD / the arrow keys, the
  * stick on phones, or by clicking the ground; drag to look. "Sit" lowers you
  * into the grass and tips your head back, and after a while every control
- * fades away, leaving only the painting. Nothing here can be touched or
+ * fades away, leaving only the painting. In full screen they fade sooner,
+ * sitting or not; move the mouse, tap, or press a key to bring them back. Nothing here can be touched or
  * changed: the other visitors and you are part of its weather.
  *
  * The three.js scene loads on demand, behind a welcome card that says what
@@ -31,6 +32,8 @@ const MAX_PITCH = 1.15;
 const MIN_PITCH = -0.7;
 /** Seconds sitting still before the controls fade, leaving only the painting. */
 const FADE_AFTER = 4;
+/** In full screen, seconds without a tap, key or mouse move before they fade. */
+const FADE_COVERED = 2.5;
 
 const MOVE_KEYS = new Set([
   "w",
@@ -81,6 +84,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     sitting: false,
     sinceSit: 0,
     still: 0,
+    covering: false,
     stride: 0,
     drag: null as {
       id: number;
@@ -210,8 +214,12 @@ export function WorldView({ world }: { world: PaintingWorld }) {
           // Settle in, then let the head tip back toward the sky.
           if (g.sinceSit > 0.6 && g.sinceSit < 3.5 && !g.drag)
             g.pitch += (Math.max(g.pitch, 0.42) - g.pitch) * Math.min(1, dt * 1.2);
+        }
+        // Holding the stick keeps it in sight.
+        if (g.stick.x || g.stick.y) g.still = 0;
+        if (g.sitting || g.covering) {
           g.still += dt;
-          if (g.still > FADE_AFTER) setQuiet(true);
+          if (g.still > (g.covering ? FADE_COVERED : FADE_AFTER)) setQuiet(true);
         }
         const moving = Boolean(mx || mz);
         const bob = moving ? Math.sin(g.stride * 4.2) * 0.025 : 0;
@@ -223,7 +231,11 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     };
     void run();
 
-    const onFull = () => setFullscreen(document.fullscreenElement === shellRef.current);
+    const onFull = () => {
+      setFullscreen(document.fullscreenElement === shellRef.current);
+      game.current.still = 0;
+      setQuiet(false);
+    };
     document.addEventListener("fullscreenchange", onFull);
     return () => {
       cancelled = true;
@@ -235,6 +247,12 @@ export function WorldView({ world }: { world: PaintingWorld }) {
       getAudio()?.release(NIGHT_MOOD);
     };
   }, []);
+
+  // Full screen starts the countdown to fading the controls afresh.
+  useEffect(() => {
+    game.current.covering = covering;
+    game.current.still = 0;
+  }, [covering]);
 
   // While the world covers the page, the page behind it mustn't scroll.
   useEffect(() => {
@@ -282,7 +300,8 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!entered) return;
     const key = keyOf(e);
-    wake();
+    // Walking in full screen leaves the controls hidden; any other key shows them.
+    if (!covering || !MOVE_KEYS.has(key)) wake();
     if (key === "Escape" && immersive) {
       setImmersive(false);
       return;
@@ -299,7 +318,6 @@ export function WorldView({ world }: { world: PaintingWorld }) {
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!entered) return;
-    wake();
     e.currentTarget.setPointerCapture(e.pointerId);
     game.current.drag = {
       id: e.pointerId,
@@ -312,8 +330,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const g = game.current;
-    if (e.pointerType === "mouse") wake();
     const d = g.drag;
+    // Moving the mouse shows the controls; dragging to look around doesn't.
+    if (!d && e.pointerType === "mouse" && Math.abs(e.movementX) + Math.abs(e.movementY) > 2)
+      wake();
     if (!d || d.id !== e.pointerId) return;
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 6) d.moved = true;
     g.yaw += (e.clientX - d.x) * LOOK;
@@ -327,6 +347,11 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     const d = g.drag;
     g.drag = null;
     if (!d || d.moved || !entered) return;
+    // While the controls are hidden, a tap only brings them back.
+    if (quiet) {
+      wake();
+      return;
+    }
     // A click on the ground: walk there.
     const rect = e.currentTarget.getBoundingClientRect();
     const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -430,8 +455,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         )}
 
         {entered && (
+          // Hidden controls can't be pressed by accident: the first tap only shows them.
           <div
-            className={`pointer-events-none absolute inset-0 transition-opacity duration-[1500ms] ${quiet ? "opacity-0" : "opacity-100"}`}
+            onPointerDownCapture={wake}
+            className={`pointer-events-none absolute inset-0 transition-[opacity,visibility] ${quiet ? "invisible opacity-0 duration-[1500ms]" : "opacity-100 duration-300"}`}
           >
             <div className="pointer-events-auto absolute top-3 left-3 max-w-[calc(100%-1.5rem)] bg-[#f3efe2] px-3.5 py-2 text-sm text-[#141414] shadow-lg">
               <span className="font-semibold">{world.title}</span>

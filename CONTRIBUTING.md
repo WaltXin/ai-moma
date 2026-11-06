@@ -58,6 +58,16 @@ seeded function that returns SVG markup using the movement's techniques) and han
 the SVG also renders in the walkable floor's canvas. Describe techniques, never copy a
 specific artwork. Curated rooms need at least 4 works; `pnpm test` checks this.
 
+## Build a painting world
+
+Visitors ask for paintings they'd like to step into with **Request this world** under each
+public-domain work; each request is an issue labelled
+[`world`](https://github.com/WaltXin/ai-moma/issues?q=is%3Aissue+label%3Aworld). Pick one with
+plenty of 👍. A world is three pieces (see `docs/ARCHITECTURE.md` → Painting worlds): an entry in
+`src/content/worlds.ts`, its layout as data in `src/lib/worlds/<slug>.ts`, and its scene in
+`src/components/worlds/`. Draw it with code after the painting, never from a photograph of it,
+and only for public-domain paintings.
+
 ### Content rules
 
 - **Teach techniques, don't copy works.** Don't commit copyrighted artworks. Images in learn

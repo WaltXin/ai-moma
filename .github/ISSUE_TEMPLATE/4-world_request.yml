@@ -1,0 +1,39 @@
+name: 🌌 Request a painting world
+description: Ask for a painting you'd like to step inside, like The Starry Night.
+labels: [world, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some paintings in AI MoMA are small worlds you can walk into and sit in. Ask for the one you'd like next. Before you do, check the [open requests](https://github.com/WaltXin/ai-moma/issues?q=is%3Aissue+label%3Aworld): if it's already there, give it a 👍 instead, so we know what's most wanted.
+  - type: input
+    id: painting
+    attributes:
+      label: Painting
+      placeholder: Wheat Field with Cypresses
+    validations:
+      required: true
+  - type: input
+    id: artist
+    attributes:
+      label: Artist
+      placeholder: Vincent van Gogh
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Where it hangs
+      description: A link to the painting on its museum's website.
+      placeholder: https://www.metmuseum.org/art/collection/search/436535
+  - type: textarea
+    id: feeling
+    attributes:
+      label: What would you do there?
+      description: Where would you sit, what would you look at, what should it feel like? Optional, but it helps whoever builds it.
+  - type: checkboxes
+    id: build
+    attributes:
+      label: Building it
+      options:
+        - label: I'd like to help build this world (see CONTRIBUTING.md → Build a painting world)

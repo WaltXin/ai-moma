@@ -24,9 +24,11 @@ import {
   getExhibitionsOnFloor,
   getFloorForExhibition,
   getMovement,
+  getWorlds,
   getWorldsForRoom,
 } from "@/lib/museum/registry";
 import type { Artwork, Exhibition, Floor, Movement, PaintingWorld } from "@/lib/museum/types";
+import { worldRequestUrl } from "@/lib/worlds/request";
 
 export function generateStaticParams() {
   return getExhibitions().map((e) => ({ slug: e.slug }));
@@ -284,8 +286,40 @@ function Bay({
       </div>
       <div className={`md:col-span-4 ${flip ? "md:order-1 md:col-start-1" : ""}`}>
         <WallLabel artwork={artwork} />
+        {artwork.credit && <AskForWorld artwork={artwork} />}
       </div>
     </li>
+  );
+}
+
+/**
+ * Under a public-domain painting's label: step into it if it has a world,
+ * or ask for one if it doesn't.
+ */
+function AskForWorld({ artwork }: { artwork: Artwork }) {
+  const world = getWorlds().find((w) => w.title === artwork.title && w.artist === artwork.artist);
+  if (world)
+    return (
+      <Link href={`/worlds/${world.slug}`} className={`${TEXT_LINK} mt-5 inline-block text-sm`}>
+        Step into it
+      </Link>
+    );
+  return (
+    <p className="mt-5 max-w-[34ch] text-sm text-muted">
+      Wish you could step inside?{" "}
+      <a
+        href={worldRequestUrl({
+          title: artwork.title,
+          artist: artwork.artist,
+          url: artwork.credit?.url,
+        })}
+        target="_blank"
+        rel="noreferrer"
+        className="font-semibold text-ink underline underline-offset-4 hover:decoration-2"
+      >
+        Request this world<span className="sr-only"> (opens GitHub in a new tab)</span>
+      </a>
+    </p>
   );
 }
 
