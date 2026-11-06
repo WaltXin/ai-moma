@@ -1,20 +1,14 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import type { Kit } from "@/components/walk/kit";
-import { type Figure, makeFigure, pose } from "@/components/walk/people";
-import { contactShadow } from "@/components/walk/textures";
 import { worldRandom } from "@/lib/worlds/random";
 import {
   CHURCH,
   CYPRESS,
-  LINGER,
-  type Linger,
   MOON,
   RIDGES,
   STARS,
   VILLAGE,
   blocked,
-  clampToBounds,
   heightAt,
   insideBounds,
   ridgeAt,
@@ -24,9 +18,9 @@ import { SKY_EL_MAX, SKY_EL_MIN, brushTile, glow, paintSky, skyFlowData } from "
 /**
  * The Starry Night, raised in three.js: a painted sky whose strokes keep
  * moving along their swirls, blue hills ridge behind ridge, a village with a
- * few lit windows, the cypress swaying, and other visitors on the hill,
- * standing or sitting in the grass, looking up. Nothing in it reacts to
- * the visitor; everyone is part of the night.
+ * few lit windows and the cypress swaying. Nobody else is on the hill:
+ * it's yours to stand in, or sit in the grass and look up. Nothing in it
+ * reacts to the visitor.
  */
 
 export type View = { x: number; y: number; z: number; yaw: number; pitch: number };
@@ -568,160 +562,6 @@ export function createStarryNightScene(
     tongues.forEach((g) => g.dispose());
   }
 
-  // ── Other visitors: on the hill, looking up ──
-  const figureMats = new Map<string, THREE.Material>();
-  const shadowTex = texture(contactShadow(), false);
-  const kit = {
-    mat: (key: string) => {
-      let m = figureMats.get(key);
-      if (!m) {
-        const [kind, hex] = key.split(/:(.*)/);
-        m =
-          kind === "person"
-            ? keep(new THREE.MeshLambertMaterial({ color: C(hex).multiplyScalar(0.85) }))
-            : keep(
-                new THREE.MeshBasicMaterial({
-                  map: shadowTex,
-                  transparent: true,
-                  depthWrite: false,
-                  opacity: 0.6,
-                }),
-              );
-        figureMats.set(key, m);
-      }
-      return m;
-    },
-    tex: () => {
-      throw new Error("unused");
-    },
-    keep,
-    levels: [],
-    shared: scene,
-    pickables: [],
-    sun: moonLight.position.clone().normalize(),
-    low,
-  } as unknown as Kit;
-
-  const COATS = [
-    "#2c4a8a",
-    "#d8a83c",
-    "#e9e2c8",
-    "#1b2a4f",
-    "#6f8fbf",
-    "#a8552c",
-    "#3f6b5a",
-    "#c9b06a",
-  ];
-  const SKIN = ["#e8bf9a", "#c9936c", "#8a5a3c", "#f0cfb0", "#6a4430"];
-  const HAIR = ["#2b211b", "#4a3424", "#111111", "#9a7748", "#c9b8a0"];
-  type Wanderer = {
-    fig: Figure;
-    x: number;
-    z: number;
-    yaw: number;
-    spot: Linger;
-    state: "walk" | "stand" | "sit";
-    timer: number;
-    stride: number;
-    rand: () => number;
-  };
-  const wanderers: Wanderer[] = [];
-  {
-    const n = worldRandom(1890);
-    const count = low ? 5 : 7;
-    for (let i = 0; i < count; i++) {
-      const fig = makeFigure(kit, {
-        coat: COATS[Math.floor(n() * COATS.length)],
-        legs: "#1d2233",
-        skin: SKIN[Math.floor(n() * SKIN.length)],
-        hair: HAIR[Math.floor(n() * HAIR.length)],
-      });
-      scene.add(fig.root);
-      const spot = LINGER[i];
-      const w: Wanderer = {
-        fig,
-        x: spot.x,
-        z: spot.z,
-        yaw: (n() - 0.5) * 0.9,
-        spot,
-        state: spot.sit ? "sit" : "stand",
-        timer: 8 + n() * 30,
-        stride: 0,
-        rand: worldRandom(100 + i),
-      };
-      wanderers.push(w);
-    }
-  }
-  const settle = (f: Figure) => {
-    f.legL.position.y = f.legR.position.y = 0.86;
-    f.body.position.y = 0;
-    f.body.rotation.x = 0;
-    f.armL.rotation.x = f.armR.rotation.x = 0;
-  };
-  /** Sitting in the grass: legs out in front, leaning back on both hands, face to the sky. */
-  const sitDown = (f: Figure) => {
-    f.legL.rotation.x = Math.PI / 2 - 0.08;
-    f.legR.rotation.x = Math.PI / 2 + 0.04;
-    f.legL.position.y = f.legR.position.y = 0.14;
-    f.body.position.y = 0.14 - 0.86;
-    f.body.rotation.x = 0.28;
-    f.armL.rotation.x = f.armR.rotation.x = 0.55;
-  };
-  const updateWanderers = (dt: number, view: View) => {
-    for (const w of wanderers) {
-      w.timer -= dt;
-      if (w.state !== "walk" && w.timer <= 0) {
-        // Off to another spot nobody else is at.
-        const taken = new Set(wanderers.map((o) => o.spot));
-        const free = LINGER.filter(
-          (s) => !taken.has(s) && Math.hypot(s.x - view.x, s.z - view.z) > 3,
-        );
-        if (free.length) {
-          w.spot = free[Math.floor(w.rand() * free.length)];
-          w.state = "walk";
-          settle(w.fig);
-        } else w.timer = 10;
-      }
-      if (w.state === "walk") {
-        const dx = w.spot.x - w.x;
-        const dz = w.spot.z - w.z;
-        const d = Math.hypot(dx, dz);
-        const nearYou = Math.hypot(view.x - w.x, view.z - w.z) < 1.4;
-        if (d < 0.25) {
-          w.state = w.spot.sit ? "sit" : "stand";
-          w.timer = 18 + w.rand() * 40;
-          w.yaw = (w.rand() - 0.5) * 1.1;
-          if (w.state === "sit") sitDown(w.fig);
-          else pose(w.fig, 0, 0);
-        } else if (!nearYou) {
-          const speed = 0.75;
-          let mx = (dx / d) * speed * dt;
-          let mz = (dz / d) * speed * dt;
-          // Round the cypress rather than through it.
-          if (blocked(w.x + mx * 8, w.z + mz * 8, 0.3)) {
-            const side = mx * (w.z - CYPRESS.z) - mz * (w.x - CYPRESS.x) > 0 ? 1 : -1;
-            [mx, mz] = [-mz * side, mx * side];
-          }
-          const next = clampToBounds(w.x + mx, w.z + mz);
-          w.x = next.x;
-          w.z = next.z;
-          w.stride += speed * dt;
-          w.yaw +=
-            Math.atan2(
-              Math.sin(Math.atan2(-mx, -mz) - w.yaw),
-              Math.cos(Math.atan2(-mx, -mz) - w.yaw),
-            ) * Math.min(1, dt * 5);
-          pose(w.fig, w.stride, 1);
-        } else pose(w.fig, w.stride, 0);
-      } else if (w.state === "stand") {
-        // Head back a little, looking up; now and then a slow turn.
-        w.fig.body.rotation.x = 0.06 * Math.sin(w.timer * 0.2) - 0.05;
-      }
-      w.fig.root.position.set(w.x, heightAt(w.x, w.z), w.z);
-      w.fig.root.rotation.y = w.yaw;
-    }
-  };
-
   const raycaster = new THREE.Raycaster();
   let width = 1;
   let height = 1;
@@ -735,7 +575,6 @@ export function createStarryNightScene(
       for (const g of glows) {
         g.sprite.material.opacity = g.base * (0.8 + 0.2 * Math.sin(time.value * g.speed + g.phase));
       }
-      updateWanderers(dt, view);
       renderer.render(scene, camera);
     },
     resize(w, h) {

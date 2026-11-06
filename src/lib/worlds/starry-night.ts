@@ -36,7 +36,6 @@ export type House = {
 };
 export type Tree = { x: number; z: number; r: number; h: number };
 export type Ridge = { z: number; base: number; height: number; seed: number; color: string };
-export type Linger = { x: number; z: number; sit: boolean };
 
 const deg = (d: number) => (d * Math.PI) / 180;
 
@@ -258,20 +257,6 @@ export const VILLAGE: { houses: House[]; trees: Tree[] } = (() => {
   }
   return { houses, trees };
 })();
-
-/** Where other visitors drift to: to stand and look up, or sit in the grass. */
-export const LINGER: Linger[] = [
-  { x: -6, z: -8, sit: true },
-  { x: 7, z: -12, sit: false },
-  { x: 15, z: -6, sit: true },
-  { x: -18, z: -2, sit: false },
-  { x: 2, z: -18, sit: true },
-  { x: 22, z: -14, sit: false },
-  { x: -24, z: -12, sit: true },
-  { x: 11, z: 4, sit: false },
-  { x: -12, z: 6, sit: true },
-  { x: 26, z: 2, sit: true },
-];
 
 /** Night music for the hill: slow, low, wide apart, never a quotation of anything. */
 export const NIGHT_MOOD: Mood = {

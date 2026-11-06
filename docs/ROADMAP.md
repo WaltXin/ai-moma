@@ -44,6 +44,7 @@ Rough order. Each item is a good first PR area.
 - [x] Step into a painting: _The Starry Night_ as a hill you walk and sit on, under a sky that keeps moving
 - [ ] More painting worlds (public domain only): Wheat Field with Cypresses, Seurat's Grande Jatte, Monet's water lilies
 - [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)
+- [ ] Real visitors in a world, quietly: see who else is sitting on the hill right now (no made-up ones)
 - [ ] VR for the most-loved worlds (WebXR)
 - [ ] Guided looking: an expert's tour through one painting, zooming to each detail as they explain it
 - [ ] Day and night: follow the clock past opening hours (the building keeps daylight hours for now)

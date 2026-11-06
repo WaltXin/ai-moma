@@ -5,7 +5,6 @@ import { WORLD_REQUEST_TEMPLATE, worldRequestUrl } from "@/lib/worlds/request";
 import {
   BOUNDS,
   CYPRESS,
-  LINGER,
   MOON,
   START,
   STARS,
@@ -39,14 +38,6 @@ describe("the Starry Night hill", () => {
   it("starts the visitor on the hilltop, clear of the cypress", () => {
     expect(insideBounds(START.x, START.z)).toBe(true);
     expect(blocked(START.x, START.z)).toBe(false);
-  });
-
-  it("gives other visitors spots they can reach and sit at", () => {
-    for (const s of LINGER) {
-      expect(insideBounds(s.x, s.z, 0.5), `${s.x},${s.z}`).toBe(true);
-      expect(blocked(s.x, s.z, 0.5), `${s.x},${s.z}`).toBe(false);
-    }
-    expect(new Set(LINGER.map((s) => `${s.x},${s.z}`)).size).toBe(LINGER.length);
   });
 
   it("keeps walkers on the hill", () => {
