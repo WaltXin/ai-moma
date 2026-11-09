@@ -1,10 +1,12 @@
 import { worldRandom } from "@/lib/worlds/random";
-import { MOON, SKY, STARS, skyFlow, swirlAt, wrap } from "@/lib/worlds/starry-night";
+import { wrap } from "@/lib/worlds/sky";
 
 /**
- * Paint for the Starry Night world, laid down stroke by stroke on canvases:
- * the whole sky as one panorama (every stroke following the swirls), and
- * small tiles of brushwork that the hills, houses and cypress are painted with.
+ * Paint for painting worlds, laid down stroke by stroke on canvases: a whole
+ * sky as one panorama (every stroke following its flow), surfaces such as
+ * ground and hillsides, and small seamless tiles of brushwork. Every painter
+ * also returns a height map of its strokes, so the paint can stand up off
+ * the canvas when it's lit.
  */
 
 /** The sky panorama covers every azimuth, and elevations from just below the horizon to straight up. */
@@ -24,15 +26,48 @@ export const lerp = (a: RGB, b: RGB, t: number): RGB => [
 const css = (c: RGB, k = 1) =>
   `rgb(${Math.min(255, Math.round(c[0] * k))},${Math.min(255, Math.round(c[1] * k))},${Math.min(255, Math.round(c[2] * k))})`;
 
-/** The sky's colour behind the strokes at an elevation: pale at the horizon, deep ultramarine overhead. */
-function groundTone(el: number): RGB {
+/** A light in a sky: a star, the moon, the sun. Its colours reach into the strokes round it. */
+export type SkyLight = {
+  az: number;
+  el: number;
+  /** How far round it its colours reach into the strokes, in radians. */
+  reach: number;
+  /** A stroke's colour within that reach: `d` is 0 at the light, 1 at the edge. */
+  tint(d: number, pick: <T>(xs: T[]) => T): RGB;
+  /** Rings of short dabs round it, innermost first, alternating each ring's colours. */
+  rings?: { radius: number; colors: RGB[][]; dab: number };
+  /** A hot core: a disc that fades from `inner` to `outer`. */
+  core?: { radius: number; inner: string; outer: string };
+  /** Anything else drawn on top, such as the moon's crescent. */
+  draw?(g: CanvasRenderingContext2D, at: { x: number; y: number; pxPerRad: number }): void;
+  /** Light spilling round it in the scene, breathing a little. */
+  glow?: { color: string; size: number; base: number; phase?: number; speed?: number };
+};
+
+/** How to paint a sky: its colours, where its strokes run, where it's paler, and its lights. */
+export type SkySpec = {
+  seed: number;
+  /** The colour behind the strokes, from the bottom of the panorama (0) to straight up (1). */
+  tones: [number, string][];
+  /** Strokes where the sky swirls (`swirlAt` near 1), and everywhere else. */
+  swirl: string[];
+  deep: string[];
+  /** Now and then a dark seam between the strokes. */
+  seam: string;
+  seamChance: number;
+  /** How many strokes, at full size; and how many broad thin ones underneath first. */
+  strokes: number;
+  underStrokes: number;
+  /** Which way strokes run at a point (unit length, in angular units). */
+  flow(az: number, el: number): { x: number; y: number };
+  /** How strongly a point belongs to a swirl (0–1). */
+  swirlAt(az: number, el: number): number;
+  lights: SkyLight[];
+};
+
+/** The sky's colour behind the strokes at an elevation. */
+function toneAt(stops: [number, RGB][], el: number): RGB {
   const t = (el - SKY_EL_MIN) / (SKY_EL_MAX - SKY_EL_MIN);
-  const stops: [number, RGB][] = [
-    [0, rgb(SKY.horizon)],
-    [0.16, rgb(SKY.low)],
-    [0.42, rgb(SKY.high)],
-    [1, rgb(SKY.zenith)],
-  ];
   for (let i = 1; i < stops.length; i++) {
     if (t <= stops[i][0])
       return lerp(
@@ -44,15 +79,13 @@ function groundTone(el: number): RGB {
   return stops.at(-1)![1];
 }
 
-/** How far a sky point is from a star or the moon, in that light's own radii (Infinity if none near). */
-function nearestLight(az: number, el: number): { kind: "star" | "moon"; d: number } | null {
-  let best: { kind: "star" | "moon"; d: number } | null = null;
-  const test = (kind: "star" | "moon", p: { az: number; el: number }, r: number) => {
-    const d = Math.hypot(wrap(az - p.az) * Math.cos(el), el - p.el) / r;
-    if (d < 1 && (!best || d < best.d)) best = { kind, d };
-  };
-  for (const s of STARS) test("star", s, 0.06 * s.size);
-  test("moon", MOON, MOON.size * 1.6);
+/** The light whose colours reach a sky point, and how far in (0 at it, 1 at its edge). */
+function nearestLight(lights: SkyLight[], az: number, el: number) {
+  let best: { light: SkyLight; d: number } | null = null;
+  for (const l of lights) {
+    const d = Math.hypot(wrap(az - l.az) * Math.cos(el), el - l.el) / l.reach;
+    if (d < 1 && (!best || d < best.d)) best = { light: l, d };
+  }
   return best;
 }
 
@@ -158,7 +191,7 @@ function lay(
  * same strokes (each a raised ridge with the grooves its bristles left), so
  * a shader can light the paint as if it stood up off the canvas.
  */
-export async function paintSky(width: number): Promise<Painted> {
+export async function paintSky(width: number, spec: SkySpec): Promise<Painted> {
   const W = width;
   const H = Math.round((W * (SKY_EL_MAX - SKY_EL_MIN)) / (Math.PI * 2));
   const { color: c, relief: r, g, hg } = canvases(W, H);
@@ -166,7 +199,9 @@ export async function paintSky(width: number): Promise<Painted> {
   const toX = (az: number) => (wrap(az) / (Math.PI * 2) + 0.5) * W;
   const toY = (el: number) => (1 - (el - SKY_EL_MIN) / (SKY_EL_MAX - SKY_EL_MIN)) * H;
   const elOf = (y: number) => SKY_EL_MIN + (1 - y / H) * (SKY_EL_MAX - SKY_EL_MIN);
-  const rand = worldRandom(1889);
+  const rand = worldRandom(spec.seed);
+  const stops = spec.tones.map(([t, hex]) => [t, rgb(hex)] as [number, RGB]);
+  const groundTone = (el: number) => toneAt(stops, el);
 
   // The ground of the painting: a smooth wash, row by row.
   for (let y = 0; y < H; y += 2) {
@@ -198,7 +233,7 @@ export async function paintSky(width: number): Promise<Painted> {
       while (lastX - x > W / 2) x += W;
       lastX = x;
       pts.push([x, toY(e)]);
-      const f = skyFlow(a, e);
+      const f = spec.flow(a, e);
       const step = len / steps;
       a += (f.x * step) / Math.max(0.25, Math.cos(e));
       e += f.y * step;
@@ -218,11 +253,9 @@ export async function paintSky(width: number): Promise<Painted> {
   };
 
   const scale = W / 4096;
-  const deep = SKY.deep.map(rgb);
-  const swirl = SKY.swirl.map(rgb);
-  const halo = SKY.halo.map(rgb);
-  const starC = SKY.star.map(rgb);
-  const moonC = SKY.moon.map(rgb);
+  const deep = spec.deep.map(rgb);
+  const swirl = spec.swirl.map(rgb);
+  const seam = rgb(spec.seam);
   const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
 
   /** Where to put the next stroke: mostly in front, where the painting is. */
@@ -234,10 +267,10 @@ export async function paintSky(width: number): Promise<Painted> {
   };
 
   // Underpainting: long, broad, thin strokes that set the swirl's colours down.
-  for (let i = 0; i < 9000; i++) {
+  for (let i = 0; i < spec.underStrokes; i++) {
     if (i % BREATH === BREATH - 1) await breathe();
     const { az, el } = place();
-    const s = swirlAt(az, el);
+    const s = spec.swirlAt(az, el);
     const base = groundTone(el);
     const col = rand() < s ? lerp(base, pick(swirl), 0.55) : lerp(base, pick(deep), 0.35);
     g.globalAlpha = 0.35;
@@ -246,34 +279,26 @@ export async function paintSky(width: number): Promise<Painted> {
   g.globalAlpha = 1;
 
   // The strokes: short, thick, side by side, each one colour.
-  const count = Math.round(70000 * Math.min(1, 0.55 + scale * 0.45));
+  const count = Math.round(spec.strokes * Math.min(1, 0.55 + scale * 0.45));
   for (let i = 0; i < count; i++) {
     if (i % BREATH === BREATH - 1) await breathe();
     const { az, el } = place();
-    const light = nearestLight(az, el);
+    const near = nearestLight(spec.lights, az, el);
     let col: RGB;
     let len = 0.022 + rand() * 0.03;
     let width = (4.5 + rand() * 4) * scale;
     let relief = 0.55 + rand() * 0.35;
-    if (light?.kind === "star") {
-      col =
-        light.d < 0.45
-          ? pick(starC)
-          : light.d < 0.75
-            ? lerp(pick(starC), pick(halo), 0.6)
-            : pick(halo);
-      len *= 0.6;
-    } else if (light?.kind === "moon") {
-      col = light.d < 0.5 ? pick(moonC) : lerp(pick(moonC), rgb(SKY.star[1]), 0.5);
+    if (near) {
+      col = near.light.tint(near.d, pick);
       len *= 0.6;
     } else {
-      const s = swirlAt(az, el);
+      const s = spec.swirlAt(az, el);
       const base = groundTone(el);
       if (rand() < s * 1.1) col = lerp(base, pick(swirl), 0.6 + 0.4 * rand());
       else col = lerp(base, pick(deep), 0.5 + 0.5 * rand());
       // Now and then a dark seam of blue between the strokes, as he drew them.
-      if (rand() < 0.12) {
-        col = rgb("#0c1c4a");
+      if (rand() < spec.seamChance) {
+        col = seam;
         width *= 0.55;
         relief = 0.2;
       }
@@ -302,22 +327,9 @@ export async function paintSky(width: number): Promise<Painted> {
       }
     }
   };
-  for (const s of STARS) {
-    rings(
-      s.az,
-      s.el,
-      0.05 * s.size,
-      [starC, [...starC, ...halo], halo, [...halo, ...swirl]],
-      0.012,
-    );
+  for (const l of spec.lights) {
+    if (l.rings) rings(l.az, l.el, l.rings.radius, l.rings.colors, l.rings.dab);
   }
-  rings(
-    MOON.az,
-    MOON.el,
-    MOON.size * 1.45,
-    [moonC, [moonC[0], moonC[1], starC[1]], [starC[1], starC[3]], [...halo, starC[1]]],
-    0.016,
-  );
 
   // The lights themselves: a hot core in each halo.
   const disc = (az: number, el: number, r: number, inner: string, outer: string) => {
@@ -343,24 +355,10 @@ export async function paintSky(width: number): Promise<Painted> {
       hg.fill();
     }
   };
-  for (const s of STARS) disc(s.az, s.el, 0.016 * s.size, "#fffdf0", "rgba(248,226,122,0)");
-
-  // The moon: an orange disc, and a lemon crescent on it.
-  disc(MOON.az, MOON.el, MOON.size * 0.75, SKY.moon[1], "rgba(224,125,34,0)");
-  const mx = toX(MOON.az);
-  const my = toY(MOON.el);
-  const mr = MOON.size * 0.5 * pxPerRad;
-  g.save();
-  g.beginPath();
-  g.arc(mx, my, mr, 0, Math.PI * 2);
-  g.clip();
-  g.fillStyle = SKY.moon[0];
-  g.fillRect(mx - mr, my - mr, mr * 2, mr * 2);
-  g.fillStyle = SKY.moon[2];
-  g.beginPath();
-  g.arc(mx + mr * 0.55, my - mr * 0.25, mr * 0.95, 0, Math.PI * 2);
-  g.fill();
-  g.restore();
+  for (const l of spec.lights) {
+    if (l.core) disc(l.az, l.el, l.core.radius, l.core.inner, l.core.outer);
+    l.draw?.(g, { x: toX(l.az), y: toY(l.el), pxPerRad });
+  }
 
   return { color: c, relief: r };
 }
@@ -369,13 +367,13 @@ export async function paintSky(width: number): Promise<Painted> {
  * The flow of the sky as a small data texture (RG = direction, in the
  * panorama's own pixel axes), for the shader that keeps the strokes moving.
  */
-export function skyFlowData(width: number, height: number): Uint8Array {
+export function skyFlowData(width: number, height: number, spec: SkySpec): Uint8Array {
   const data = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {
     const el = SKY_EL_MIN + (1 - (y + 0.5) / height) * (SKY_EL_MAX - SKY_EL_MIN);
     for (let x = 0; x < width; x++) {
       const az = ((x + 0.5) / width - 0.5) * Math.PI * 2;
-      const f = skyFlow(az, el);
+      const f = spec.flow(az, el);
       // In panorama pixels, a step in azimuth is longer the higher up it is.
       let u = f.x / Math.max(0.25, Math.cos(el));
       let v = f.y;
@@ -386,7 +384,7 @@ export function skyFlowData(width: number, height: number): Uint8Array {
       data[i] = Math.round((u * 0.5 + 0.5) * 255);
       // Texture v runs up the panorama, as elevation does.
       data[i + 1] = Math.round((v * 0.5 + 0.5) * 255);
-      data[i + 2] = Math.round(swirlAt(az, el) * 255);
+      data[i + 2] = Math.round(spec.swirlAt(az, el) * 255);
       data[i + 3] = 255;
     }
   }

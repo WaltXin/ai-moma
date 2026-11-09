@@ -1,5 +1,9 @@
 import { worldRandom } from "./random";
+import { flowAround, wrap, type SkyPoint, type Vortex } from "./sky";
+
+export { wrap, type SkyPoint, type Vortex };
 import type { Mood } from "@/lib/walk/music";
+import type { WorldPlace } from "./place";
 
 /**
  * The Starry Night as a place to stand in: the hill outside the window at
@@ -17,9 +21,6 @@ import type { Mood } from "@/lib/walk/music";
  * used: this is an interpretation drawn with code.
  */
 
-export type SkyPoint = { az: number; el: number };
-/** A swirl in the sky: strokes circle it. `spin` 1 is counter-clockwise as seen. */
-export type Vortex = SkyPoint & { r: number; spin: 1 | -1; strength: number };
 export type Star = SkyPoint & { size: number };
 export type House = {
   x: number;
@@ -144,33 +145,13 @@ export const SKY = {
  * ringed round each star and the moon.
  */
 export function skyFlow(az: number, el: number): { x: number; y: number } {
-  let x = 1;
-  let y = 0.35 * Math.sin(az * 3.2 + el * 4) + 0.18 * Math.sin(az * 7.1 - el * 3);
-  for (const v of VORTICES) {
-    const dx = wrap(az - v.az) * Math.cos(el);
-    const dy = el - v.el;
-    const d = Math.hypot(dx, dy);
-    const w = v.strength * Math.exp(-((d / v.r) ** 2)) * 3.2;
-    if (d > 1e-6) {
-      x += (-dy / d) * w * v.spin;
-      y += (dx / d) * w * v.spin;
-    }
-  }
-  for (const s of [
-    ...STARS.map((s) => ({ ...s, r: deg(3.4) * s.size })),
-    { ...MOON, r: MOON.size * 1.6 },
-  ]) {
-    const dx = wrap(az - s.az) * Math.cos(el);
-    const dy = el - s.el;
-    const d = Math.hypot(dx, dy);
-    const w = Math.exp(-((d / s.r) ** 2)) * 6;
-    if (d > 1e-6) {
-      x += (-dy / d) * w;
-      y += (dx / d) * w;
-    }
-  }
-  const len = Math.hypot(x, y) || 1;
-  return { x: x / len, y: y / len };
+  return flowAround(
+    az,
+    el,
+    VORTICES,
+    [...STARS.map((s) => ({ ...s, r: deg(3.4) * s.size })), { ...MOON, r: MOON.size * 1.6 }],
+    (a, e) => 0.35 * Math.sin(a * 3.2 + e * 4) + 0.18 * Math.sin(a * 7.1 - e * 3),
+  );
 }
 
 /** How strongly a point belongs to a swirl (0–1): swirls are painted paler. */
@@ -236,9 +217,6 @@ export function landFlow(x: number, z: number): [number, number] {
   const l = Math.hypot(fx, fz) || 1;
   return [fx / l, fz / l];
 }
-
-/** An angle wrapped to −π…π. */
-export const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 /** The blue hills, ridge behind ridge, the farthest palest. */
 export const RIDGES: Ridge[] = [
@@ -320,4 +298,15 @@ export const NIGHT_MOOD: Mood = {
   density: 0.2,
   brightness: 1300,
   range: [3, 12],
+};
+
+/** The hill, for walking on. */
+export const STARRY_NIGHT: WorldPlace = {
+  start: START,
+  heightAt,
+  clampToBounds,
+  blocked,
+  mood: NIGHT_MOOD,
+  ground: "the grass",
+  background: "#0e1a3d",
 };

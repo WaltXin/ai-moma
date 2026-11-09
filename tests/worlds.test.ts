@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { SCENES } from "@/components/worlds/scenes";
 import { getWorlds } from "@/lib/museum/registry";
+import { PLACES } from "@/lib/worlds/places";
 import { WORLD_REQUEST_TEMPLATE, worldRequestUrl } from "@/lib/worlds/request";
 import {
   BOUNDS,
@@ -18,9 +20,23 @@ import {
 } from "@/lib/worlds/starry-night";
 
 describe("painting worlds", () => {
-  it("only lists worlds that have a scene", () => {
-    // Each slug needs a scene in src/components/worlds/; add it there first.
-    expect(getWorlds().map((w) => w.slug)).toEqual(["starry-night"]);
+  it("gives every world a place to walk and a scene, and nothing more", () => {
+    // Each slug needs a place in src/lib/worlds/places.ts and a scene in
+    // src/components/worlds/scenes.ts; add them there first.
+    const slugs = getWorlds()
+      .map((w) => w.slug)
+      .sort();
+    expect(Object.keys(PLACES).sort()).toEqual(slugs);
+    expect(Object.keys(SCENES).sort()).toEqual(slugs);
+  });
+
+  it("starts every visitor somewhere they may stand", () => {
+    for (const [slug, p] of Object.entries(PLACES)) {
+      const c = p.clampToBounds(p.start.x, p.start.z);
+      expect(c, slug).toEqual({ x: p.start.x, z: p.start.z });
+      expect(p.blocked(p.start.x, p.start.z), slug).toBe(false);
+      expect(Number.isFinite(p.heightAt(p.start.x, p.start.z)), slug).toBe(true);
+    }
   });
 
   it("asks for a new world on a GitHub form that exists, filled in", () => {
