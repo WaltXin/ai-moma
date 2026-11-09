@@ -11,12 +11,12 @@ import { MOON, SKY, STARS, skyFlow, swirlAt, wrap } from "@/lib/worlds/starry-ni
 export const SKY_EL_MIN = (-12 * Math.PI) / 180;
 export const SKY_EL_MAX = Math.PI / 2;
 
-type RGB = [number, number, number];
-const rgb = (hex: string): RGB => {
+export type RGB = [number, number, number];
+export const rgb = (hex: string): RGB => {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
-const lerp = (a: RGB, b: RGB, t: number): RGB => [
+export const lerp = (a: RGB, b: RGB, t: number): RGB => [
   a[0] + (b[0] - a[0]) * t,
   a[1] + (b[1] - a[1]) * t,
   a[2] + (b[2] - a[2]) * t,
@@ -63,26 +63,105 @@ const grey = (h: number) => {
 };
 
 /**
+ * Gives the main thread back for a moment, so the page stays responsive while
+ * a world is painted. A message, not a timer: timers in a background tab
+ * wait a whole second.
+ */
+export function breathe(): Promise<void> {
+  return new Promise((resolve) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => {
+      ch.port1.close();
+      resolve();
+    };
+    ch.port2.postMessage(null);
+  });
+}
+/** How many strokes to lay between breaths. */
+const BREATH = 4000;
+
+/** Paint on a canvas, and how thick it stands on a second one the same size. */
+export type Painted = { color: HTMLCanvasElement; relief: HTMLCanvasElement };
+
+/** A fresh pair of canvases: the colour, and the height map under it, bare. */
+function canvases(
+  W: number,
+  H: number,
+): Painted & {
+  g: CanvasRenderingContext2D;
+  hg: CanvasRenderingContext2D;
+} {
+  const color = document.createElement("canvas");
+  color.width = W;
+  color.height = H;
+  const relief = document.createElement("canvas");
+  relief.width = W;
+  relief.height = H;
+  const g = color.getContext("2d")!;
+  const hg = relief.getContext("2d")!;
+  hg.fillStyle = grey(0.08);
+  hg.fillRect(0, 0, W, H);
+  for (const ctx of [g, hg]) {
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }
+  return { color, relief, g, hg };
+}
+
+/**
+ * Lays one stroke along `pts`: its colour on `g`, and on `hg` a raised ridge
+ * (a shoulder, then the crown, then a groove or two the bristles dragged).
+ * `relief` is how thick the paint stands (0 lays it flat).
+ */
+function lay(
+  g: CanvasRenderingContext2D,
+  hg: CanvasRenderingContext2D,
+  pts: [number, number][],
+  width: number,
+  color: string,
+  relief: number,
+) {
+  const last = pts.length - 1;
+  // Across the stroke, for the bristle grooves: the normal of its overall direction.
+  const dx = pts[last][0] - pts[0][0];
+  const dy = pts[last][1] - pts[0][1];
+  const dl = Math.hypot(dx, dy) || 1;
+  const nx = -dy / dl;
+  const ny = dx / dl;
+  const path = (ctx: CanvasRenderingContext2D, off: number) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0] + nx * off, pts[0][1] + ny * off);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] + nx * off, pts[i][1] + ny * off);
+    ctx.stroke();
+  };
+  g.strokeStyle = color;
+  g.lineWidth = width;
+  path(g, 0);
+  if (relief <= 0) return;
+  hg.strokeStyle = grey(relief * 0.6);
+  hg.lineWidth = width;
+  path(hg, 0);
+  hg.strokeStyle = grey(relief);
+  hg.lineWidth = width * 0.55;
+  path(hg, 0);
+  if (width > 3) {
+    hg.strokeStyle = grey(relief * 0.55);
+    hg.lineWidth = Math.max(0.8, width * 0.1);
+    path(hg, width * 0.2);
+    path(hg, -width * 0.3);
+  }
+}
+
+/**
  * Paints the sky panorama. `width` is the canvas's width (all 360°); its
  * height keeps pixels square. Returns the colour, and a height map of the
  * same strokes (each a raised ridge with the grooves its bristles left), so
  * a shader can light the paint as if it stood up off the canvas.
  */
-export function paintSky(width: number): { color: HTMLCanvasElement; relief: HTMLCanvasElement } {
+export async function paintSky(width: number): Promise<Painted> {
   const W = width;
   const H = Math.round((W * (SKY_EL_MAX - SKY_EL_MIN)) / (Math.PI * 2));
-  const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
-  const g = c.getContext("2d")!;
-  const r = document.createElement("canvas");
-  r.width = W;
-  r.height = H;
-  const hg = r.getContext("2d")!;
-  hg.fillStyle = grey(0.08);
-  hg.fillRect(0, 0, W, H);
-  hg.lineCap = "round";
-  hg.lineJoin = "round";
+  const { color: c, relief: r, g, hg } = canvases(W, H);
   const pxPerRad = W / (Math.PI * 2);
   const toX = (az: number) => (wrap(az) / (Math.PI * 2) + 0.5) * W;
   const toY = (el: number) => (1 - (el - SKY_EL_MIN) / (SKY_EL_MAX - SKY_EL_MIN)) * H;
@@ -94,9 +173,6 @@ export function paintSky(width: number): { color: HTMLCanvasElement; relief: HTM
     g.fillStyle = css(groundTone(elOf(y)));
     g.fillRect(0, y, W, 2);
   }
-
-  g.lineCap = "round";
-  g.lineJoin = "round";
 
   /**
    * A stroke that follows the flow from (az, el), drawn again where it crosses
@@ -127,39 +203,17 @@ export function paintSky(width: number): { color: HTMLCanvasElement; relief: HTM
       a += (f.x * step) / Math.max(0.25, Math.cos(e));
       e += f.y * step;
     }
-    // Across the stroke, for the bristle grooves: the normal of its overall direction.
-    const dx = pts[steps][0] - pts[0][0];
-    const dy = pts[steps][1] - pts[0][1];
-    const dl = Math.hypot(dx, dy) || 1;
-    const nx = -dy / dl;
-    const ny = dx / dl;
-    const path = (ctx: CanvasRenderingContext2D, shift: number, off: number) => {
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0] + shift + nx * off, pts[0][1] + ny * off);
-      for (let i = 1; i < pts.length; i++)
-        ctx.lineTo(pts[i][0] + shift + nx * off, pts[i][1] + ny * off);
-      ctx.stroke();
-    };
-    g.strokeStyle = color;
-    g.lineWidth = width;
     for (const shift of [0, -W, W]) {
       const xs = pts.map((p) => p[0] + shift);
       if (Math.max(...xs) < -width || Math.min(...xs) > W + width) continue;
-      path(g, shift, 0);
-      if (relief <= 0) continue;
-      // The ridge: a shoulder, then the crown, then a groove or two the bristles dragged.
-      hg.strokeStyle = grey(relief * 0.6);
-      hg.lineWidth = width;
-      path(hg, shift, 0);
-      hg.strokeStyle = grey(relief);
-      hg.lineWidth = width * 0.55;
-      path(hg, shift, 0);
-      if (width > 3) {
-        hg.strokeStyle = grey(relief * 0.55);
-        hg.lineWidth = Math.max(0.8, width * 0.1);
-        path(hg, shift, width * 0.2);
-        path(hg, shift, -width * 0.3);
-      }
+      lay(
+        g,
+        hg,
+        pts.map(([x, y]) => [x + shift, y]),
+        width,
+        color,
+        relief,
+      );
     }
   };
 
@@ -181,6 +235,7 @@ export function paintSky(width: number): { color: HTMLCanvasElement; relief: HTM
 
   // Underpainting: long, broad, thin strokes that set the swirl's colours down.
   for (let i = 0; i < 9000; i++) {
+    if (i % BREATH === BREATH - 1) await breathe();
     const { az, el } = place();
     const s = swirlAt(az, el);
     const base = groundTone(el);
@@ -193,6 +248,7 @@ export function paintSky(width: number): { color: HTMLCanvasElement; relief: HTM
   // The strokes: short, thick, side by side, each one colour.
   const count = Math.round(70000 * Math.min(1, 0.55 + scale * 0.45));
   for (let i = 0; i < count; i++) {
+    if (i % BREATH === BREATH - 1) await breathe();
     const { az, el } = place();
     const light = nearestLight(az, el);
     let col: RGB;
@@ -339,8 +395,9 @@ export function skyFlowData(width: number, height: number): Uint8Array {
 
 /**
  * A square tile of brushwork, seamless when repeated: grey strokes over grey,
- * to be multiplied with a surface's own colour. `angle` is the strokes' main
- * direction (0 along the tile's u), `wave` how much they bend about it.
+ * to be multiplied with a surface's own colour, and the height map of the
+ * same strokes, for a bump map. `angle` is the strokes' main direction (0
+ * along the tile's u), `wave` how much they bend about it.
  */
 export function brushTile(
   size: number,
@@ -352,14 +409,11 @@ export function brushTile(
     seed,
     dark = 0.55,
   }: { angle: number; wave: number; len: number; width: number; seed: number; dark?: number },
-): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const g = c.getContext("2d")!;
+): Painted {
+  const { color, relief, g, hg } = canvases(size, size);
   const rand = worldRandom(seed);
   g.fillStyle = "rgb(215,215,215)";
   g.fillRect(0, 0, size, size);
-  g.lineCap = "round";
   const count = Math.round((size * size) / (len * width * 0.45));
   for (let i = 0; i < count; i++) {
     const x = rand() * size;
@@ -370,8 +424,8 @@ export function brushTile(
       (rand() - 0.5) * 0.3;
     const l = len * (0.6 + rand() * 0.8);
     const tone = Math.round(255 * (dark + rand() * (1 - dark)));
-    g.strokeStyle = `rgb(${tone},${tone},${tone})`;
-    g.lineWidth = width * (0.7 + rand() * 0.6);
+    const w = width * (0.7 + rand() * 0.6);
+    const h = 0.5 + rand() * 0.45;
     const dx = Math.cos(a) * l;
     const dy = Math.sin(a) * l;
     const bend = (rand() - 0.5) * l * 0.4;
@@ -381,19 +435,181 @@ export function brushTile(
         const sx = x + ox;
         const sy = y + oy;
         if (sx + l < 0 || sx - l > size || sy + l < 0 || sy - l > size) continue;
-        g.beginPath();
-        g.moveTo(sx - dx / 2, sy - dy / 2);
-        g.quadraticCurveTo(
-          sx - dy * 0.0 + bend * Math.sin(a),
-          sy + bend * Math.cos(a),
-          sx + dx / 2,
-          sy + dy / 2,
-        );
-        g.stroke();
+        const curve = (ctx: CanvasRenderingContext2D, style: string, lw: number) => {
+          ctx.strokeStyle = style;
+          ctx.lineWidth = lw;
+          ctx.beginPath();
+          ctx.moveTo(sx - dx / 2, sy - dy / 2);
+          ctx.quadraticCurveTo(
+            sx + bend * Math.sin(a),
+            sy + bend * Math.cos(a),
+            sx + dx / 2,
+            sy + dy / 2,
+          );
+          ctx.stroke();
+        };
+        curve(g, `rgb(${tone},${tone},${tone})`, w);
+        curve(hg, grey(h * 0.6), w);
+        curve(hg, grey(h), w * 0.5);
       }
     }
   }
-  return c;
+  return { color, relief };
+}
+
+/**
+ * How to paint a flat surface (ground seen from above, or a hillside seen
+ * from the front). Positions are in metres: `s` across the canvas, `t` down it.
+ */
+export type Surface = {
+  /** The canvas, in pixels, and how many metres one pixel covers. */
+  width: number;
+  height: number;
+  metresPerPx: number;
+  /** How many strokes to lay. Where strokes are bigger, fewer go, so cover stays even. */
+  count: number;
+  seed: number;
+  /** The colour under everything at a point. */
+  wash(s: number, t: number): RGB;
+  /** How long a stroke is here, in metres. */
+  size(s: number, t: number): number;
+  /** Which way strokes run here (any length). */
+  flow(s: number, t: number): [number, number];
+  /** One stroke's colour here, and how thick it stands (0–1). */
+  paint(s: number, t: number, rand: () => number): { color: RGB; relief: number };
+  /** A stroke's width as a share of its length. */
+  aspect?: number;
+  /** How far, in radians, a stroke may turn from the flow. */
+  jitter?: number;
+};
+
+/** Paints a surface stroke by stroke: an even wash, a thin underpainting, then thick strokes on top. */
+export async function paintSurface(o: Surface): Promise<Painted> {
+  const { width: W, height: H, metresPerPx: mpp } = o;
+  const { color, relief, g, hg } = canvases(W, H);
+  const rand = worldRandom(o.seed);
+  const aspect = o.aspect ?? 0.3;
+  const jitter = o.jitter ?? 0.35;
+
+  const cell = 12;
+  for (let y = 0; y < H; y += cell) {
+    for (let x = 0; x < W; x += cell) {
+      g.fillStyle = css(o.wash((x + cell / 2) * mpp, (y + cell / 2) * mpp));
+      g.fillRect(x, y, cell, cell);
+    }
+  }
+
+  // The smallest stroke anywhere, so bigger ones can be spread out in proportion.
+  let minLen = Infinity;
+  for (let i = 0; i < 400; i++)
+    minLen = Math.min(minLen, o.size(rand() * W * mpp, rand() * H * mpp));
+
+  const strokeAt = (s: number, t: number, len: number) => {
+    const pts: [number, number][] = [];
+    let a = s;
+    let b = t;
+    const steps = 3;
+    const turn = (rand() - 0.5) * 2 * jitter;
+    const cos = Math.cos(turn);
+    const sin = Math.sin(turn);
+    for (let i = 0; i <= steps; i++) {
+      pts.push([a / mpp, b / mpp]);
+      const [fx, fy] = o.flow(a, b);
+      const fl = Math.hypot(fx, fy) || 1;
+      a += (((fx * cos - fy * sin) / fl) * len) / steps;
+      b += (((fx * sin + fy * cos) / fl) * len) / steps;
+    }
+    // Start half a stroke back, so it's centred on where it was put.
+    const ox = (pts[0][0] - pts[steps][0]) / 2;
+    const oy = (pts[0][1] - pts[steps][1]) / 2;
+    return pts.map(([x, y]) => [x + ox, y + oy] as [number, number]);
+  };
+
+  const place = () => {
+    for (;;) {
+      const s = rand() * W * mpp;
+      const t = rand() * H * mpp;
+      const len = o.size(s, t);
+      if (rand() < (minLen / len) ** 2) return { s, t, len };
+    }
+  };
+
+  // Underpainting: long, thin, flat-ish strokes that set the colours down.
+  for (let i = 0; i < o.count * 0.2; i++) {
+    if (i % BREATH === BREATH - 1) await breathe();
+    const { s, t, len } = place();
+    const { color: c } = o.paint(s, t, rand);
+    lay(
+      g,
+      hg,
+      strokeAt(s, t, len * 1.8),
+      (len * aspect * 1.6) / mpp,
+      css(lerp(o.wash(s, t), c, 0.5)),
+      0.2,
+    );
+  }
+  // The strokes: short, thick, side by side, each one colour.
+  for (let i = 0; i < o.count; i++) {
+    if (i % BREATH === BREATH - 1) await breathe();
+    const { s, t, len: l } = place();
+    const len = l * (0.7 + rand() * 0.6);
+    const { color: c, relief: h } = o.paint(s, t, rand);
+    lay(
+      g,
+      hg,
+      strokeAt(s, t, len),
+      Math.max(1.2, (len * aspect) / mpp) * (0.8 + rand() * 0.4),
+      css(c, 0.92 + rand() * 0.16),
+      h,
+    );
+  }
+  return { color, relief };
+}
+
+/**
+ * Turns a height map into a normal map, in place: each pixel's slope (how
+ * steeply the paint rises across and down it) as a direction, so a lit
+ * surface shows every ridge and groove at whatever distance it's seen.
+ * `height` is how many pixels tall the thickest paint stands; `wrap` reads
+ * across the edges, for tiles.
+ */
+export async function reliefToNormals(
+  relief: HTMLCanvasElement,
+  height: number,
+  wrap: boolean,
+): Promise<HTMLCanvasElement> {
+  const W = relief.width;
+  const H = relief.height;
+  const ctx = relief.getContext("2d")!;
+  const src = ctx.getImageData(0, 0, W, H).data;
+  const out = ctx.createImageData(W, H);
+  const o = out.data;
+  const at = (x: number, y: number) => {
+    if (wrap) {
+      x = (x + W) % W;
+      y = (y + H) % H;
+    } else {
+      x = x < 0 ? 0 : x >= W ? W - 1 : x;
+      y = y < 0 ? 0 : y >= H ? H - 1 : y;
+    }
+    return src[(y * W + x) * 4] / 255;
+  };
+  for (let y = 0; y < H; y++) {
+    if (y % Math.max(1, Math.round(1e6 / W)) === 0 && y > 0) await breathe();
+    for (let x = 0; x < W; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * 0.5 * height;
+      // Canvas rows run down; texture v runs up, so a rise down the rows tilts the normal up.
+      const dy = (at(x, y + 1) - at(x, y - 1)) * 0.5 * height;
+      const l = Math.hypot(dx, dy, 1);
+      const i = (y * W + x) * 4;
+      o[i] = Math.round((-dx / l) * 127.5 + 127.5);
+      o[i + 1] = Math.round((dy / l) * 127.5 + 127.5);
+      o[i + 2] = Math.round((1 / l) * 127.5 + 127.5);
+      o[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  return relief;
 }
 
 /** A soft round glow, for the light that spills round each star and the moon. */

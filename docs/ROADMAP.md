@@ -43,7 +43,7 @@ Rough order. Each item is a good first PR area.
 - [x] Baked light: laylights, downlights, windows and the atrium's skylight traced round every floor, with two bounces
 - [x] Step into a painting: _The Starry Night_ as a hill you walk and sit on, under a sky that keeps moving
 - [x] Thick paint: the Starry Night sky's strokes stand up off the canvas, lit from the moon's side
-- [ ] Thick paint on the land too: hills, village, trees and cypress built from the same raised
+- [x] Thick paint on the land too: hills, village, trees and cypress built from the same raised
       strokes as the sky, in the painting's greens, ochres and teal
 - [ ] More painting worlds (public domain only): Wheat Field with Cypresses, Seurat's Grande Jatte, Monet's water lilies
 - [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)

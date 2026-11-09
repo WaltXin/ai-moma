@@ -13,6 +13,7 @@ import {
   clampToBounds,
   heightAt,
   insideBounds,
+  landFlow,
   skyFlow,
 } from "@/lib/worlds/starry-night";
 
@@ -85,5 +86,23 @@ describe("the Starry Night hill", () => {
         expect(Math.hypot(f.x, f.y)).toBeCloseTo(1, 5);
       }
     }
+  });
+
+  it("gives every point of the land a stroke direction, along the hill's contours", () => {
+    for (let x = -500; x <= 500; x += 37) {
+      for (let z = -480; z <= 100; z += 29) {
+        const [fx, fz] = landFlow(x, z);
+        expect(Math.hypot(fx, fz)).toBeCloseTo(1, 5);
+      }
+    }
+    // On the hill's flank, a stroke barely climbs: it follows the slope round.
+    const [fx, fz] = landFlow(40, -40);
+    const climb = heightAt(40 + fx, -40 + fz) - heightAt(40, -40);
+    const steepest = Math.hypot(
+      heightAt(41, -40) - heightAt(40, -40),
+      heightAt(40, -39) - heightAt(40, -40),
+    );
+    expect(steepest).toBeGreaterThan(0.2);
+    expect(Math.abs(climb)).toBeLessThan(steepest * 0.15);
   });
 });

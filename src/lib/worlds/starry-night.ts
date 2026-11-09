@@ -190,6 +190,53 @@ export function swirlAt(az: number, el: number): number {
   return Math.min(1, Math.max(s, wave * 0.9));
 }
 
+/**
+ * The land's colours, after the painting: the hill in greens, olive and
+ * ochre, the valley in blues and teal, fields of dull green and ochre round
+ * the village, the far land rising blue. Dark seams run between strokes.
+ */
+export const LAND = {
+  hill: ["#2f5a3c", "#3f6f3f", "#567f3e", "#6d8b3f", "#8a9446", "#a88a3a", "#2a5f5a", "#244a3a"],
+  valley: ["#22406b", "#2c5480", "#2f5f6f", "#3a6b6a", "#456f92", "#1f3a62"],
+  fields: ["#5f7a4a", "#7a7f45", "#4f6d5a", "#8a8550", "#3f6a5f"],
+  far: ["#2e4f86", "#3b5f9e", "#4a6aa6", "#35577f", "#56689e"],
+  seam: "#0f1f42",
+  /** The colour under the strokes on the hill, in the valley and far off. */
+  wash: { hill: "#2c4f38", valley: "#22406b", far: "#2e4f86" },
+};
+
+/** Trees and the cypress: dark greens going to teal, catching olive and ochre at their edges. */
+export const FOLIAGE = {
+  dark: ["#14302c", "#1b3a33", "#21463a", "#163a4a", "#1d3f2a"],
+  edge: ["#4f6b3a", "#3f6a5a", "#6b6a34", "#5a7a48", "#7a8a48"],
+};
+
+/**
+ * Which way the strokes run over the land at (x, z), as a unit vector in
+ * the ground plane: round the hill along its contours, as he painted slopes,
+ * and in long rolling waves across the flat of the valley.
+ */
+export function landFlow(x: number, z: number): [number, number] {
+  const e = 0.5;
+  const gx = (heightAt(x + e, z) - heightAt(x - e, z)) / (2 * e);
+  const gz = (heightAt(x, z + e) - heightAt(x, z - e)) / (2 * e);
+  const slope = Math.hypot(gx, gz);
+  // Along the contour: across the slope, never up or down it.
+  let cx = slope > 1e-6 ? -gz / slope : 1;
+  let cz = slope > 1e-6 ? gx / slope : 0;
+  if (cx < 0) {
+    cx = -cx;
+    cz = -cz;
+  }
+  const wx = 1;
+  const wz = 0.3 * Math.sin(x * 0.03 + z * 0.05) + 0.15 * Math.sin(x * 0.011 - z * 0.02);
+  const k = smooth(slope / 0.25);
+  const fx = cx * k + wx * (1 - k);
+  const fz = cz * k + wz * (1 - k);
+  const l = Math.hypot(fx, fz) || 1;
+  return [fx / l, fz / l];
+}
+
 /** An angle wrapped to −π…π. */
 export const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 

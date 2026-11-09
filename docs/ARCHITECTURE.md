@@ -235,8 +235,16 @@ at load time: about 70,000 short strokes, each following a flow field (a rolling
 round each vortex and ringed round each star). Every stroke is also drawn on a height map,
 as a raised ridge with the grooves its bristles left, and the shader lights that relief from
 the moon's side, so the paint stands up off the canvas like impasto. The shader keeps the
-strokes sliding along that flow, so the sky never stops moving. The hills, houses and cypress are lit meshes painted
-with tiles of brushwork.
+strokes sliding along that flow, so the sky never stops moving.
+
+The land is painted the same way (`paintSurface` in `brush.ts`): the ground seen from above,
+its strokes following the hill's contours (`landFlow`) in the palette in `LAND`, a finer canvas
+for the hilltop and a coarser one for the valley; each ridge of hills along its own line. Each
+height map becomes a normal map, so lit paint keeps its relief at any distance, and near the
+visitor a fine tile of bristle marks is laid over the hilltop. The cypress is a few thousand
+raised strokes laid up dark tongues of flame. Houses and trees carry a brushwork tile and a dark
+outline. The canvases paint a few thousand strokes at a time (`breathe`), so the page stays
+responsive while the world is built.
 
 **No photograph of the painting is used**, not even a public-domain one. The world is an
 interpretation drawn with code, and the welcome says where the real painting hangs. Only
