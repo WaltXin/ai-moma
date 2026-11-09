@@ -130,10 +130,16 @@ export function WorldView({ world }: { world: PaintingWorld }) {
       if (cancelled) return;
       setTouch(coarse);
       try {
-        scene = createStarryNightScene(canvas, { low: coarse });
+        // Painted a little at a time, so the welcome stays responsive meanwhile.
+        const made = await createStarryNightScene(canvas, { low: coarse });
+        if (cancelled) {
+          made.dispose();
+          return;
+        }
+        scene = made;
       } catch (err) {
         console.error(err);
-        setMode("unsupported");
+        if (!cancelled) setMode("unsupported");
         return;
       }
       sceneRef.current = scene;
