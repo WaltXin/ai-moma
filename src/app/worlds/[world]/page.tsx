@@ -46,8 +46,14 @@ async function World({ params }: { params: PageProps<"/worlds/[world]">["params"
         <div className="mx-auto max-w-6xl px-4 py-6 text-[#c9d4ea] sm:px-6">
           <p>
             An interpretation in 3D of {world.artist}&apos;s {world.title} ({world.year}), drawn
-            with code by{" "}
-            <Creators creators={world.creators} className={`${TEXT_LINK} text-white`} />.{" "}
+            with code
+            {world.creators?.length ? (
+              <>
+                {" "}
+                by <Creators creators={world.creators} className={`${TEXT_LINK} text-white`} />
+              </>
+            ) : null}
+            .{" "}
             {room && (
               <>
                 Its painter hangs in{" "}

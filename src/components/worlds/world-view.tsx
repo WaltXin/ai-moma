@@ -432,10 +432,12 @@ export function WorldView({ world }: { world: PaintingWorld }) {
                 After {world.artist}, {world.year}
               </p>
               <p className="mt-4 leading-relaxed">{world.intro}</p>
-              <p className="mt-4 text-sm text-[#5c5c5c]">
-                A painting world by <Creators creators={world.creators} />.
-              </p>
-              <p className="mt-1 text-sm text-[#5c5c5c]">
+              {world.creators?.length ? (
+                <p className="mt-4 text-sm text-[#5c5c5c]">
+                  A painting world by <Creators creators={world.creators} />.
+                </p>
+              ) : null}
+              <p className={`${world.creators?.length ? "mt-1" : "mt-4"} text-sm text-[#5c5c5c]`}>
                 Drawn with code, not copied from a photograph. The painting itself is at{" "}
                 <a
                   href={world.heldBy.url}
@@ -454,7 +456,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
                   onClick={() => enter(true)}
                   className="inline-flex items-center gap-2 bg-[#141414] px-5 py-3 font-semibold text-white disabled:opacity-60"
                 >
-                  {mode === "ready" ? "Enter with sound" : "Painting the sky…"}
+                  {mode === "ready" ? "Enter with sound" : "Painting the world…"}
                   {mode === "ready" && <Arrow />}
                 </button>
                 {mode === "ready" && (

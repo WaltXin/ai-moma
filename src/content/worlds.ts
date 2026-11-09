@@ -9,7 +9,7 @@ import type { PaintingWorld } from "@/lib/museum/types";
  * Painting worlds are the idea of the artist Liya Tian, made with Walt Xin.
  */
 
-/** The two who made the first world together. */
+/** The two who made the first world together: credited on The Starry Night. */
 const LIYA_AND_WALT = [
   { name: "Liya Tian", url: "https://www.linkedin.com/in/liya-tian" },
   { name: "Walt Xin", url: "https://github.com/WaltXin" },
@@ -41,7 +41,6 @@ export const worlds: PaintingWorld[] = [
     },
     movement: "post-impressionism",
     room: "color-and-structure",
-    creators: LIYA_AND_WALT,
     intro:
       "Summer 1889, a field of ripe wheat below the hills outside Saint-Rémy. The wind is going through the wheat, two cypresses stand dark against the clouds, and the clouds won't stop turning. Wade into the wheat, or sit in the grass among the poppies.",
   },
@@ -56,7 +55,6 @@ export const worlds: PaintingWorld[] = [
     },
     movement: "post-impressionism",
     room: "color-and-structure",
-    creators: LIYA_AND_WALT,
     intro:
       "August 1888, Arles. Fifteen sunflowers in a jug on a yellow table, painted to welcome a friend. You are small enough to walk the table, under flowers as big as trees, among the petals they've let fall. Sit by the jug and look up.",
   },

@@ -161,6 +161,6 @@ export type PaintingWorld = {
   room: Slug;
   /** One or two sentences on the way in. */
   intro: string;
-  /** Who made the world: credited on the way in and under it. */
-  creators: { name: string; url?: string }[];
+  /** Who made the world, if it's credited: on the way in and under it. */
+  creators?: { name: string; url?: string }[];
 };

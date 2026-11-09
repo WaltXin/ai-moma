@@ -222,7 +222,8 @@ world you walk round and sit in, alone with it: no made-up visitors wander about
 Nothing in it can be touched. Painting worlds are the idea of the artist
 [Liya Tian](https://www.linkedin.com/in/liya-tian), who makes them with Walt Xin: people love to
 sit and stare in museums, so give a few paintings a place to do that inside them. Each world
-credits its makers (`creators` in `src/content/worlds.ts`) on the way in and under it.
+can credit its makers (`creators` in `src/content/worlds.ts`, optional) on the way in and under
+it; only The Starry Night does.
 
 ```
 src/content/worlds.ts                 PaintingWorld: title, artist, year, where the real one hangs, its room here

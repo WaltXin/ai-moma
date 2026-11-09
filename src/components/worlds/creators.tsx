@@ -5,7 +5,7 @@ export function Creators({
   creators,
   className = "underline underline-offset-2",
 }: {
-  creators: PaintingWorld["creators"];
+  creators: NonNullable<PaintingWorld["creators"]>;
   className?: string;
 }) {
   return creators.map((c, i) => (

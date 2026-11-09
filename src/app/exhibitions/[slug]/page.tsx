@@ -132,14 +132,16 @@ function WorldDoor({ world }: { world: PaintingWorld }) {
             After {world.artist}, {world.year}
           </p>
           <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-pretty">{world.intro}</p>
-          <p className="mt-4 text-sm text-[#aebbd8]">
-            A painting world by{" "}
-            <Creators
-              creators={world.creators}
-              className="text-[#e9eefb] underline underline-offset-2"
-            />
-            .
-          </p>
+          {world.creators?.length ? (
+            <p className="mt-4 text-sm text-[#aebbd8]">
+              A painting world by{" "}
+              <Creators
+                creators={world.creators}
+                className="text-[#e9eefb] underline underline-offset-2"
+              />
+              .
+            </p>
+          ) : null}
         </div>
         <div className="flex items-end md:col-span-5 md:justify-end">
           <Link
