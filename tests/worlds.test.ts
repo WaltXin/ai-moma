@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SCENES } from "@/components/worlds/scenes";
 import { getWorlds } from "@/lib/museum/registry";
 import { PLACES } from "@/lib/worlds/places";
+import * as WHEAT from "@/lib/worlds/wheat-field";
 import { WORLD_REQUEST_TEMPLATE, worldRequestUrl } from "@/lib/worlds/request";
 import {
   BOUNDS,
@@ -120,5 +121,44 @@ describe("the Starry Night hill", () => {
     );
     expect(steepest).toBeGreaterThan(0.2);
     expect(Math.abs(climb)).toBeLessThan(steepest * 0.15);
+  });
+});
+
+describe("the Wheat Field", () => {
+  const W = WHEAT;
+  const az = (x: number, z: number) => Math.atan2(x - W.START.x, -(z - W.START.z));
+
+  it("starts the visitor in the grass, with the wheat right in front", () => {
+    expect(W.wheatAt(W.START.x, W.START.z)).toBe(0);
+    expect(W.wheatAt(W.START.x, W.START.z - 25)).toBeCloseTo(1, 5);
+  });
+
+  it("stands the cypresses on the right, out of reach, and the olive on the left", () => {
+    for (const c of W.CYPRESSES) {
+      expect(az(c.x, c.z)).toBeGreaterThan(0);
+      expect(W.insideBounds(c.x, c.z)).toBe(false);
+    }
+    for (const b of W.OLIVE) expect(az(b.x, b.z)).toBeLessThan(0);
+    // The olive's trunk can't be walked through.
+    expect(W.blocked(W.OLIVE[0].x, W.OLIVE[0].z)).toBe(true);
+  });
+
+  it("keeps the wheat, waving, below a sitting visitor's eyes", () => {
+    // The wind lifts it by at most 0.08 m; a sitting visitor's eyes are 0.9 m up.
+    expect(W.WHEAT_HEIGHT + 0.08).toBeLessThan(0.9);
+  });
+
+  it("gives every point of the field a stroke direction", () => {
+    for (let x = -100; x <= 100; x += 13) {
+      for (let z = -80; z <= 20; z += 11) {
+        const [fx, fz] = W.fieldFlow(x, z);
+        expect(Math.hypot(fx, fz)).toBeCloseTo(1, 5);
+      }
+    }
+  });
+
+  it("paints clouds where the clouds are, and clear sky between", () => {
+    for (const c of W.CLOUDS) expect(W.cloudAt(c.az, c.el)).toBeCloseTo(1, 5);
+    expect(W.cloudAt(0, Math.PI / 2 - 0.05)).toBeLessThan(0.5);
   });
 });
