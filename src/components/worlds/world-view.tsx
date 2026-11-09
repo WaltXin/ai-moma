@@ -477,21 +477,24 @@ export function WorldView({ world }: { world: PaintingWorld }) {
             onPointerDownCapture={wake}
             className={`pointer-events-none absolute inset-0 transition-[opacity,visibility] ${quiet ? "invisible opacity-0 duration-[1500ms]" : "opacity-100 duration-300"}`}
           >
-            <div className="pointer-events-auto absolute top-3 left-3 max-w-[calc(100%-1.5rem)] bg-[#f3efe2] px-3.5 py-2 text-sm text-[#141414] shadow-lg">
-              <span className="font-semibold">{world.title}</span>
-              <span className="text-[#5c5c5c]">
-                {" "}
-                · after {world.artist}, {world.year}
-              </span>
-            </div>
+            {/* The title, and the hint under it however many lines the title takes. */}
+            <div className="absolute top-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-2">
+              <div className="pointer-events-auto bg-[#f3efe2] px-3.5 py-2 text-sm text-[#141414] shadow-lg">
+                <span className="font-semibold">{world.title}</span>
+                <span className="text-[#5c5c5c]">
+                  {" "}
+                  · after {world.artist}, {world.year}
+                </span>
+              </div>
 
-            {hint && (
-              <p className="absolute top-14 left-3 max-w-xs bg-black/45 px-3 py-2 text-sm text-white backdrop-blur-sm">
-                {touch
-                  ? `Drag to look around. Walk with the stick, or tap ${place.ground} to walk there.`
-                  : `Drag to look around. Walk with WASD or the arrow keys, or click ${place.ground}. Press C to sit.`}
-              </p>
-            )}
+              {hint && (
+                <p className="max-w-xs bg-black/45 px-3 py-2 text-sm text-white backdrop-blur-sm">
+                  {touch
+                    ? `Drag to look around. Walk with the stick, or tap ${place.ground} to walk there.`
+                    : `Drag to look around. Walk with WASD or the arrow keys, or click ${place.ground}. Press C to sit.`}
+                </p>
+              )}
+            </div>
 
             <div className="pointer-events-auto absolute right-3 bottom-3 flex flex-wrap justify-end gap-2 max-sm:flex-col max-sm:items-end">
               <button

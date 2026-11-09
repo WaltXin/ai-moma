@@ -57,6 +57,10 @@ export type SkySpec = {
   seamChance: number;
   /** How many strokes, at full size; and how many broad thin ones underneath first. */
   strokes: number;
+  /** How big each stroke is, against the Starry Night's (1). */
+  strokeScale?: number;
+  /** The share of strokes laid in front (within 75° of straight ahead), where the painting is; 0.7 if not given. */
+  ahead?: number;
   underStrokes: number;
   /** Which way strokes run at a point (unit length, in angular units). */
   flow(az: number, el: number): { x: number; y: number };
@@ -256,12 +260,15 @@ export async function paintSky(width: number, spec: SkySpec): Promise<Painted> {
   const deep = spec.deep.map(rgb);
   const swirl = spec.swirl.map(rgb);
   const seam = rgb(spec.seam);
+  const big = spec.strokeScale ?? 1;
   const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
 
   /** Where to put the next stroke: mostly in front, where the painting is. */
   const place = () => {
     const az =
-      rand() < 0.7 ? (rand() - 0.5) * ((150 * Math.PI) / 180) : (rand() - 0.5) * Math.PI * 2;
+      rand() < (spec.ahead ?? 0.7)
+        ? (rand() - 0.5) * ((150 * Math.PI) / 180)
+        : (rand() - 0.5) * Math.PI * 2;
     const el = SKY_EL_MIN + rand() * (SKY_EL_MAX - SKY_EL_MIN - 0.08);
     return { az, el };
   };
@@ -285,8 +292,8 @@ export async function paintSky(width: number, spec: SkySpec): Promise<Painted> {
     const { az, el } = place();
     const near = nearestLight(spec.lights, az, el);
     let col: RGB;
-    let len = 0.022 + rand() * 0.03;
-    let width = (4.5 + rand() * 4) * scale;
+    let len = (0.022 + rand() * 0.03) * big;
+    let width = (4.5 + rand() * 4) * scale * big;
     let relief = 0.55 + rand() * 0.35;
     if (near) {
       col = near.light.tint(near.d, pick);
@@ -474,7 +481,15 @@ export type Surface = {
   /** Which way strokes run here (any length). */
   flow(s: number, t: number): [number, number];
   /** One stroke's colour here, and how thick it stands (0–1). */
-  paint(s: number, t: number, rand: () => number): { color: RGB; relief: number };
+  paint(
+    s: number,
+    t: number,
+    rand: () => number,
+  ): {
+    color: RGB;
+    relief: number;
+    /** Shorter (or longer) than strokes here usually are. */ scale?: number;
+  };
   /** A stroke's width as a share of its length. */
   aspect?: number;
   /** How far, in radians, a stroke may turn from the flow. */
@@ -550,8 +565,9 @@ export async function paintSurface(o: Surface): Promise<Painted> {
   for (let i = 0; i < o.count; i++) {
     if (i % BREATH === BREATH - 1) await breathe();
     const { s, t, len: l } = place();
-    const len = l * (0.7 + rand() * 0.6);
-    const { color: c, relief: h } = o.paint(s, t, rand);
+    const base = l * (0.7 + rand() * 0.6);
+    const { color: c, relief: h, scale = 1 } = o.paint(s, t, rand);
+    const len = base * scale;
     lay(
       g,
       hg,

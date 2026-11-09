@@ -6,4 +6,6 @@ import type { SceneMaker } from "./kit";
  */
 export const SCENES: Record<string, () => Promise<SceneMaker>> = {
   "starry-night": () => import("./starry-night-scene").then((m) => m.createStarryNightScene),
+  "wheat-field-with-cypresses": () =>
+    import("./wheat-field-scene").then((m) => m.createWheatFieldScene),
 };

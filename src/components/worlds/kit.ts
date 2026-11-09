@@ -260,6 +260,21 @@ export function createStage(
 }
 
 /**
+ * Changes a material's shader. three.js caches programs by the text of
+ * `onBeforeCompile`, which is the same for every material changed through
+ * the same helper; `key` tells them apart (a tree's sway, a glow's strength).
+ */
+export function customize(
+  material: THREE.Material,
+  key: string,
+  change: (shader: THREE.WebGLProgramParametersWithUniforms) => void,
+) {
+  material.onBeforeCompile = change;
+  material.customProgramCacheKey = () => key;
+  return material;
+}
+
+/**
  * Keeps some of the paint's own colour where the light doesn't reach, as a
  * painting has no black shadows.
  */
@@ -280,9 +295,9 @@ export function withBristles(
   material: THREE.MeshLambertMaterial,
   bristles: PaintMaps,
   metres = 1.8,
-  extra?: (shader: THREE.WebGLProgramParametersWithUniforms) => void,
+  extra?: { key: string; change: (shader: THREE.WebGLProgramParametersWithUniforms) => void },
 ) {
-  material.onBeforeCompile = (shader) => {
+  return customize(material, `bristles:${metres}:${extra?.key ?? ""}`, (shader) => {
     shader.uniforms.uBristle = { value: bristles.map };
     shader.uniforms.uBristleN = { value: bristles.normal };
     shader.vertexShader = shader.vertexShader
@@ -314,9 +329,8 @@ export function withBristles(
           mapN = normalize(vec3(mapN.xy + bN.xy, mapN.z * bN.z));
           normal = normalize(tbn * mapN);`,
       );
-    extra?.(shader);
-  };
-  return material;
+    extra?.change(shader);
+  });
 }
 
 /** The fine bristle tile laid over the ground near the visitor. */
@@ -588,7 +602,10 @@ export async function addGround(
     t.repeat.set(1 / (u1 - u0), 1 / (v1 - v0));
     t.offset.set(-u0 / (u1 - u0), -v0 / (v1 - v0));
   }
-  const nearMat = withBristles(painted(nearPaint, 1), await bristleTile(stage));
+  const nearMat = withBristles(
+    painted(nearPaint, 1),
+    await bristleTile(stage),
+  ) as THREE.MeshLambertMaterial;
   const mesh = new THREE.Mesh(keep(g), [painted(farPaint, 1), nearMat]);
   scene.add(mesh);
   return mesh;
@@ -698,6 +715,46 @@ export async function addRidges(
 
 // ── Trees built of strokes ──
 
+/**
+ * Raised strokes as ribbons. Each row across a stroke is its left edge, its
+ * raised crown and its right edge, so a stroke stands off what it's laid on
+ * and catches the light; each takes its own patch of the bristle tile, its
+ * grooves running along it.
+ */
+function strokeRibbons() {
+  const sp: number[] = [];
+  const sc: number[] = [];
+  const suv: number[] = [];
+  const si: number[] = [];
+  return {
+    /** One stroke: `rows` from start to end, each [left, crown, right]; `v` how far along each row is, in tile units. */
+    add(rows: THREE.Vector3[][], c: THREE.Color, ou: number, ov: number, v: (j: number) => number) {
+      const base = sp.length / 3;
+      for (const [j, row] of rows.entries()) {
+        for (const [k, p] of row.entries()) {
+          sp.push(p.x, p.y, p.z);
+          sc.push(c.r, c.g, c.b);
+          suv.push(ou + k * 0.06, ov + v(j));
+        }
+        if (j > 0) {
+          const a = base + (j - 1) * 3;
+          const b = a + 3;
+          si.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2);
+        }
+      }
+    },
+    geometry() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
+      g.setAttribute("color", new THREE.Float32BufferAttribute(sc, 3));
+      g.setAttribute("uv", new THREE.Float32BufferAttribute(suv, 2));
+      g.setIndex(si);
+      g.computeVertexNormals();
+      return g;
+    },
+  };
+}
+
 /** A flame-like tree: where it stands, how big, its paint, and how much detail. */
 export type FlameTree = {
   x: number;
@@ -715,6 +772,11 @@ export type FlameTree = {
   edge: string[];
   /** The direction round the tree (radians) that faces the light, where edge colours gather. */
   litFrom: number;
+  /** How much of its colour it keeps in shade (0.4 if not given). */
+  glow?: number;
+  /** How long its strokes are, in metres (1.1–2.4 if not given), and how wide (0.32–0.62). */
+  strokeLen?: [number, number];
+  strokeWidth?: [number, number];
 };
 
 /**
@@ -727,26 +789,29 @@ export async function addFlameTree(stage: Stage, t: FlameTree) {
   /** Lets the tree sway, more toward its top. */
   const sway = (shader: THREE.WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = time;
-    shader.vertexShader = `uniform float uTime;\n${shader.vertexShader}`.replace(
-      "#include <begin_vertex>",
-      `#include <begin_vertex>
-      float k = pow(max(position.y, 0.0) / ${t.height.toFixed(1)}, 1.6);
+    // Each tree's own height, as a uniform, so trees of every size share one program.
+    shader.uniforms.uTreeHeight = { value: t.height };
+    shader.vertexShader =
+      `uniform float uTime;\nuniform float uTreeHeight;\n${shader.vertexShader}`.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+      float k = pow(max(position.y, 0.0) / uTreeHeight, 1.6);
       transformed.x += sin(uTime * 0.7 + position.y * 0.18) * 0.5 * k;
       transformed.z += cos(uTime * 0.55 + position.y * 0.13) * 0.32 * k;`,
-    );
+      );
   };
   const treeMat = keep(new THREE.MeshLambertMaterial({ vertexColors: true }));
-  treeMat.onBeforeCompile = sway;
+  customize(treeMat, "flame-tree", sway);
   const strokeTile = await stage.tile(
     "flame-strokes",
     { angle: Math.PI / 2, wave: 0.35, len: 4, width: 22, seed: 14, dark: 0.55 },
     5,
   );
   const strokeMat = painted(strokeTile, 1.2);
-  strokeMat.onBeforeCompile = (shader) => {
+  customize(strokeMat, `flame-strokes:${t.glow ?? 0.4}`, (shader) => {
     sway(shader);
-    glowInShade(shader, 0.4);
-  };
+    glowInShade(shader, t.glow ?? 0.4);
+  });
 
   const n = worldRandom(t.seed);
   const tongues: THREE.BufferGeometry[] = [];
@@ -826,10 +891,7 @@ export async function addFlameTree(stage: Stage, t: FlameTree) {
   // The strokes: thousands of curved, raised dabs laid up the tongues, each one colour,
   // flickering upward with the flame the way he drew it.
   const STROKES = low ? t.strokes[0] : t.strokes[1];
-  const sp: number[] = [];
-  const sc: number[] = [];
-  const suv: number[] = [];
-  const si: number[] = [];
+  const ribbons = strokeRibbons();
   const ALONG = 4;
   for (let s = 0; s < STROKES; s++) {
     // Bigger tongues get more strokes.
@@ -838,20 +900,23 @@ export async function addFlameTree(stage: Stage, t: FlameTree) {
       tg = all[Math.floor(n() * all.length)];
       if (n() < (tg.h * tg.r0) / (t.height * t.radius * 0.7)) break;
     }
-    const len = (1.1 + n() * 1.3) / tg.h;
+    const len =
+      ((t.strokeLen?.[0] ?? 1.1) + n() * ((t.strokeLen?.[1] ?? 2.4) - (t.strokeLen?.[0] ?? 1.1))) /
+      tg.h;
     const t0 = n() * (1 - len * 0.6);
     const phi0 = n() * Math.PI * 2;
     const drift = (n() - 0.5) * 0.5;
-    const width = 0.32 + n() * 0.3;
+    const width =
+      (t.strokeWidth?.[0] ?? 0.32) +
+      n() * ((t.strokeWidth?.[1] ?? 0.62) - (t.strokeWidth?.[0] ?? 0.32));
     let c = dark[Math.floor(n() * dark.length)].clone();
     // The side toward the light catches more of the edge colours.
     const facing = Math.cos(phi0 - t.litFrom);
     if (n() < 0.3 + 0.3 * Math.max(0, facing)) c.lerp(C(edge[Math.floor(n() * edge.length)]), 0.85);
     c = c.multiplyScalar(0.9 + n() * 0.25);
-    const base = sp.length / 3;
-    // Each stroke takes its own patch of the bristle tile, its grooves running along it.
     const ou = n();
     const ov = n();
+    const rows: THREE.Vector3[][] = [];
     for (let j = 0; j <= ALONG; j++) {
       const f = j / ALONG;
       const s1 = Math.min(0.999, t0 + f * len);
@@ -860,30 +925,15 @@ export async function addFlameTree(stage: Stage, t: FlameTree) {
       // Tapered at both ends, fullest just past the middle.
       const w = width * Math.sin(Math.PI * (0.12 + 0.76 * f)) ** 0.7;
       const dphi = w / 2 / r;
-      // Raised along its crown, so each stroke stands off the tree and catches the light.
-      for (const [dp, lift] of [
-        [-dphi, 0.04],
-        [0, 0.1 + w * 0.15],
-        [dphi, 0.04],
-      ] as const) {
-        const v = tongueAt(tg, s1, phi + dp, lift);
-        sp.push(v.x, v.y, v.z);
-        sc.push(c.r, c.g, c.b);
-        suv.push(ou + (dp / dphi + 1) * 0.06, ov + (f * len * tg.h) / 3.2);
-      }
-      if (j > 0) {
-        const a = base + (j - 1) * 3;
-        const b = a + 3;
-        si.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2);
-      }
+      rows.push([
+        tongueAt(tg, s1, phi - dphi, 0.04),
+        tongueAt(tg, s1, phi, 0.1 + w * 0.15),
+        tongueAt(tg, s1, phi + dphi, 0.04),
+      ]);
     }
+    ribbons.add(rows, c, ou, ov, (j) => ((j / ALONG) * len * tg.h) / 3.2);
   }
-  const strokeGeo = keep(new THREE.BufferGeometry());
-  strokeGeo.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
-  strokeGeo.setAttribute("color", new THREE.Float32BufferAttribute(sc, 3));
-  strokeGeo.setAttribute("uv", new THREE.Float32BufferAttribute(suv, 2));
-  strokeGeo.setIndex(si);
-  strokeGeo.computeVertexNormals();
+  const strokeGeo = keep(ribbons.geometry());
 
   const tree = new THREE.Mesh(keep(mergeGeometries(tongues)), treeMat);
   const strokes = new THREE.Mesh(strokeGeo, strokeMat);
@@ -917,13 +967,35 @@ export async function addBushes(
     edgeChance: number;
     ink: string;
     glow: number;
+    /**
+     * Covers each lump in raised strokes flicking upward, over a darker
+     * `under`: how many per square metre (phones, elsewhere), and how long
+     * and wide they are, in metres.
+     */
+    strokes?: {
+      perSquareMetre: [number, number];
+      len: [number, number];
+      width: [number, number];
+      under: string[];
+    };
   },
 ) {
-  const { keep, painted, paintColor, outline, worldUV, scene } = stage;
+  const { keep, painted, paintColor, outline, worldUV, scene, low } = stage;
   const n = o.rand;
   const fol = { dark: o.dark.map(C), edge: o.edge.map(C) };
+  const under = o.strokes?.under.map(C);
   const blobs: THREE.BufferGeometry[] = [];
   const treeInk: THREE.BufferGeometry[] = [];
+  /** Each lump's shape, for laying strokes on it. */
+  const shapes: {
+    cx: number;
+    cy: number;
+    cz: number;
+    R: number;
+    H: number;
+    ph: number;
+    t: Bush;
+  }[] = [];
   for (const t of o.bushes) {
     const lumps = 2 + Math.floor(n() * 3);
     for (let k = 0; k < lumps; k++) {
@@ -943,7 +1015,9 @@ export async function addBushes(
       b.scale(t.r * s, (t.h / 2) * s, t.r * s);
       const ox = k === 0 ? 0 : (n() - 0.5) * t.r * 1.4;
       const oz = k === 0 ? 0 : (n() - 0.5) * t.r * 1.0;
-      b.translate(t.x + ox, o.heightAt(t.x, t.z) + t.h * (0.4 - (k === 0 ? 0 : 0.15)), t.z + oz);
+      const cy = o.heightAt(t.x, t.z) + t.h * (0.4 - (k === 0 ? 0 : 0.15));
+      b.translate(t.x + ox, cy, t.z + oz);
+      shapes.push({ cx: t.x + ox, cy, cz: t.z + oz, R: t.r * s, H: (t.h / 2) * s, ph, t });
       // Smooth shading across the lumps' facets, then split, so each stroke takes its own colour.
       const smoothB = mergeVertices(b);
       b.dispose();
@@ -952,6 +1026,7 @@ export async function addBushes(
       smoothB.dispose();
       treeInk.push(outline(g, 1.06));
       paintColor(g, (_, v) => {
+        if (under) return under[Math.floor(n() * under.length)];
         const c = fol.dark[Math.floor(n() * fol.dark.length)].clone();
         // The side facing the light catches its edge colours.
         const lit = (v.x - t.x) * o.litSide > 0 && n() < o.edgeChance;
@@ -969,8 +1044,66 @@ export async function addBushes(
     dark: 0.5,
   });
   const mat = painted(flameTile, 1);
-  mat.onBeforeCompile = (shader) => glowInShade(shader, o.glow);
+  customize(mat, `bush:${o.glow}`, (shader) => glowInShade(shader, o.glow));
   scene.add(new THREE.Mesh(keep(worldUV(mergeGeometries(blobs), 3)), mat));
   scene.add(new THREE.Mesh(keep(mergeGeometries(treeInk)), stage.ink(o.ink)));
   [...blobs, ...treeInk].forEach((g) => g.dispose());
+
+  if (!o.strokes) return;
+  const st = o.strokes;
+  /** A point on a lump: `theta` round it, `phi` up it from its equator, `lift` out from it. */
+  const lumpAt = (L: (typeof shapes)[number], theta: number, phi: number, lift: number) => {
+    const x = Math.cos(phi) * Math.cos(theta);
+    const y = Math.sin(phi);
+    const z = Math.cos(phi) * Math.sin(theta);
+    const bump = 1 + 0.18 * Math.sin(x * 5 + L.ph) * Math.sin(y * 4 + z * 3 + L.ph);
+    const tip = y > 0 ? 1 - 0.35 * y * y : 1;
+    const p = new THREE.Vector3(x * bump * tip * L.R, y * bump * L.H, z * bump * tip * L.R);
+    const out = p.clone().normalize();
+    return p.addScaledVector(out, lift).add(new THREE.Vector3(L.cx, L.cy, L.cz));
+  };
+  const ribbons = strokeRibbons();
+  const ALONG = 4;
+  for (const L of shapes) {
+    // Roughly the lump's skin, above the ground.
+    const area = 4 * Math.PI * Math.pow(L.R * L.R * L.H, 2 / 3) * 0.8;
+    const count = Math.round(area * st.perSquareMetre[low ? 0 : 1]);
+    for (let i = 0; i < count; i++) {
+      const theta0 = n() * Math.PI * 2;
+      const phi0 = -0.3 + n() * 1.55;
+      const len = st.len[0] + n() * (st.len[1] - st.len[0]);
+      const width = st.width[0] + n() * (st.width[1] - st.width[0]);
+      const drift = (n() - 0.5) * 0.6;
+      let c = fol.dark[Math.floor(n() * fol.dark.length)].clone();
+      // The side toward the light catches its edge colours.
+      const facing = Math.cos(theta0) * o.litSide;
+      if (n() < o.edgeChance * (0.35 + 0.65 * Math.max(0, facing)) + 0.08)
+        c.lerp(fol.edge[Math.floor(n() * fol.edge.length)], 0.8);
+      c = c.multiplyScalar(0.9 + n() * 0.2);
+      const rMean = (L.R + L.H) / 2;
+      const rows: THREE.Vector3[][] = [];
+      for (let j = 0; j <= ALONG; j++) {
+        const f = j / ALONG;
+        // Up the lump, leaning as it goes, as his strokes flick upward.
+        const phi = Math.min(1.45, phi0 + (f * len) / rMean);
+        const theta = theta0 + drift * f * (len / rMean);
+        const w = width * Math.sin(Math.PI * (0.12 + 0.76 * f)) ** 0.7;
+        const dth = w / 2 / Math.max(0.3, L.R * Math.cos(phi));
+        rows.push([
+          lumpAt(L, theta - dth, phi, 0.03),
+          lumpAt(L, theta, phi, 0.07 + w * 0.15),
+          lumpAt(L, theta + dth, phi, 0.03),
+        ]);
+      }
+      ribbons.add(rows, c, n(), n(), (j) => ((j / ALONG) * len) / 3.2);
+    }
+  }
+  const strokeTile = await stage.tile(
+    "flame-strokes",
+    { angle: Math.PI / 2, wave: 0.35, len: 4, width: 22, seed: 14, dark: 0.55 },
+    5,
+  );
+  const strokeMat = painted(strokeTile, 1.2);
+  customize(strokeMat, `bush-strokes:${o.glow}`, (shader) => glowInShade(shader, o.glow));
+  scene.add(new THREE.Mesh(keep(ribbons.geometry()), strokeMat));
 }

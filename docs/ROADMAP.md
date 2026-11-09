@@ -45,7 +45,13 @@ Rough order. Each item is a good first PR area.
 - [x] Thick paint: the Starry Night sky's strokes stand up off the canvas, lit from the moon's side
 - [x] Thick paint on the land too: hills, village, trees and cypress built from the same raised
       strokes as the sky, in the painting's greens, ochres and teal
-- [ ] More painting worlds (public domain only): Wheat Field with Cypresses, Seurat's Grande Jatte, Monet's water lilies
+- [x] A world kit (`src/components/worlds/kit.ts`) and a standard every world meets
+      (`docs/ARCHITECTURE.md`), so any painting can be raised like the Starry Night
+- [x] Second world: _Wheat Field with Cypresses_, wading through the wheat under turning clouds
+- [ ] More painting worlds (public domain only): Sunflowers (a still life: decide what the
+      visitor does there first), Seurat's Grande Jatte (dots; but it's full of people),
+      Monet's water lilies (water and reflections are new)
+- [ ] Paint the Starry Night village's trees with raised strokes too, as the Wheat Field's bushes are
 - [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)
 - [ ] Real visitors in a world, quietly: see who else is sitting on the hill right now (no made-up ones)
 - [ ] VR for the most-loved worlds (WebXR)

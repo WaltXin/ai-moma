@@ -30,4 +30,19 @@ export const worlds: PaintingWorld[] = [
     intro:
       "June 1889, the hill outside Saint-Rémy before dawn. The village is asleep, the cypress burns black against the sky, and the sky won't keep still. Walk the hill, or sit in the grass and look up.",
   },
+  {
+    slug: "wheat-field-with-cypresses",
+    title: "Wheat Field with Cypresses",
+    artist: "Vincent van Gogh",
+    year: 1889,
+    heldBy: {
+      institution: "The Metropolitan Museum of Art, New York",
+      url: "https://www.metmuseum.org/art/collection/search/436535",
+    },
+    movement: "post-impressionism",
+    room: "color-and-structure",
+    creators: LIYA_AND_WALT,
+    intro:
+      "Summer 1889, a field of ripe wheat below the hills outside Saint-Rémy. The wind is going through the wheat, two cypresses stand dark against the clouds, and the clouds won't stop turning. Wade into the wheat, or sit in the grass among the poppies.",
+  },
 ];

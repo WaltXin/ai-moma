@@ -254,14 +254,25 @@ bristles left. Lit, the paint stands up off the canvas like impasto.
   lighter at the rim, in shadow lower down, with a dark line on top.
 - **Flame trees** (`addFlameTree`): a cypress as tongues of flame twisting up round one
   another, covered in a few thousand curved, raised strokes, swaying.
-- **Bushes** (`addBushes`): bumpy lumps drawn up into a point, painted, outlined in ink.
+- **Bushes** (`addBushes`): bumpy lumps drawn up into a point, painted, outlined in ink, and
+  (with `strokes`) covered in raised strokes flicking upward.
+
+Custom shaders go through `customize`, which gives each its own program cache key: three.js
+otherwise shares one program between materials changed by the same helper, so a second tree
+or a waving wheat field would silently draw with the first one's shader.
 
 Height maps become normal maps (`reliefToNormals`), so paint keeps its relief at any distance.
 Painters lay a few thousand strokes at a time and then let the page breathe (`breathe`), so
 the welcome stays responsive while a world is painted.
 
 The first world is _The Starry Night_ (`starry-night`): a hill above a sleeping village, its
-cypress, and the night sky with eleven stars and the moon.
+cypress, and the night sky with eleven stars and the moon. The second, _Wheat Field with
+Cypresses_ (`wheat-field-with-cypresses`), is built on the same kit: a summer sky of cream
+clouds (`cloudAt`, painted with bigger strokes, as much behind the visitor as in front), the
+Alpilles as ridges, two flame trees, an olive and green bushes covered in raised strokes
+(`addBushes` with `strokes`), poppies in the grass, and one piece of its own: the wheat, a
+painted surface standing hip-high over the ground and waving in the wind, that the visitor
+wades through.
 
 ### Adding a world
 
