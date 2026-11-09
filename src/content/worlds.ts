@@ -45,4 +45,19 @@ export const worlds: PaintingWorld[] = [
     intro:
       "Summer 1889, a field of ripe wheat below the hills outside Saint-Rémy. The wind is going through the wheat, two cypresses stand dark against the clouds, and the clouds won't stop turning. Wade into the wheat, or sit in the grass among the poppies.",
   },
+  {
+    slug: "sunflowers",
+    title: "Sunflowers",
+    artist: "Vincent van Gogh",
+    year: 1888,
+    heldBy: {
+      institution: "The National Gallery, London",
+      url: "https://www.nationalgallery.org.uk/paintings/vincent-van-gogh-sunflowers",
+    },
+    movement: "post-impressionism",
+    room: "color-and-structure",
+    creators: LIYA_AND_WALT,
+    intro:
+      "August 1888, Arles. Fifteen sunflowers in a jug on a yellow table, painted to welcome a friend. You are small enough to walk the table, under flowers as big as trees, among the petals they've let fall. Sit by the jug and look up.",
+  },
 ];

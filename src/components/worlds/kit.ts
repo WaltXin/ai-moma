@@ -721,7 +721,7 @@ export async function addRidges(
  * and catches the light; each takes its own patch of the bristle tile, its
  * grooves running along it.
  */
-function strokeRibbons() {
+export function strokeRibbons() {
   const sp: number[] = [];
   const sc: number[] = [];
   const suv: number[] = [];
@@ -942,6 +942,26 @@ export async function addFlameTree(stage: Stage, t: FlameTree) {
     scene.add(m);
   }
   tongues.forEach((g) => g.dispose());
+}
+
+/**
+ * The material raised strokes are drawn with: the bristle tile on them, and
+ * `glow` of their own colour kept in shade. Two-sided for strokes seen from
+ * behind (petals).
+ */
+export async function strokeMaterial(
+  stage: Stage,
+  glow: number,
+  { twoSided = false, dark = 0.55 }: { twoSided?: boolean; dark?: number } = {},
+) {
+  // The darker the tile's grooves, the darker the strokes: bright petals want a light one.
+  const tile = await stage.tile(
+    `flame-strokes:${dark}`,
+    { angle: Math.PI / 2, wave: 0.35, len: 4, width: 22, seed: 14, dark },
+    5,
+  );
+  const mat = stage.painted(tile, 1.2, twoSided ? { side: THREE.DoubleSide } : {});
+  return customize(mat, `strokes:${glow}:${twoSided}`, (shader) => glowInShade(shader, glow));
 }
 
 /** A bush or round tree: where it stands, how wide and how tall. */
