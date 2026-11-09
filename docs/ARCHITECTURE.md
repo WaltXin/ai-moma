@@ -232,8 +232,10 @@ src/components/worlds/         the scene (three.js), its brushwork (canvas), and
 
 The first is _The Starry Night_ (`starry-night`). Its sky is one panorama painted on a canvas
 at load time: about 70,000 short strokes, each following a flow field (a rolling wave bent
-round each vortex and ringed round each star). A shader keeps the strokes sliding along that
-flow, so the sky never stops moving. The hills, houses and cypress are lit meshes painted
+round each vortex and ringed round each star). Every stroke is also drawn on a height map,
+as a raised ridge with the grooves its bristles left, and the shader lights that relief from
+the moon's side, so the paint stands up off the canvas like impasto. The shader keeps the
+strokes sliding along that flow, so the sky never stops moving. The hills, houses and cypress are lit meshes painted
 with tiles of brushwork.
 
 **No photograph of the painting is used**, not even a public-domain one. The world is an

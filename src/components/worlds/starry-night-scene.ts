@@ -77,13 +77,21 @@ export function createStarryNightScene(
   // ── The sky: one painted panorama, its strokes sliding along the flow ──
   const sky = new THREE.Group();
   scene.add(sky);
-  const skyCanvas = paintSky(low ? 2048 : 4096);
+  const painted = paintSky(low ? 2048 : 4096);
   // Lets a browser console look at the painted panorama while developing.
-  if (process.env.NODE_ENV === "development") Object.assign(window, { __skyCanvas: skyCanvas });
-  const skyTex = texture(skyCanvas, false);
+  if (process.env.NODE_ENV === "development")
+    Object.assign(window, { __skyCanvas: painted.color, __skyRelief: painted.relief });
+  const skyTex = texture(painted.color, false);
   skyTex.wrapS = THREE.RepeatWrapping;
   skyTex.generateMipmaps = false;
   skyTex.minFilter = THREE.LinearFilter;
+  // How thick the paint stands: raw values, not a colour.
+  const reliefTex = texture(painted.relief, false);
+  reliefTex.colorSpace = THREE.NoColorSpace;
+  reliefTex.wrapS = THREE.RepeatWrapping;
+  reliefTex.generateMipmaps = false;
+  reliefTex.minFilter = THREE.LinearFilter;
+  const texel = new THREE.Vector2(1 / painted.color.width, 1 / painted.color.height);
   const FW = 256;
   const FH = Math.round((FW * (SKY_EL_MAX - SKY_EL_MIN)) / (Math.PI * 2));
   const flowTex = keep(new THREE.DataTexture(skyFlowData(FW, FH), FW, FH, THREE.RGBAFormat));
@@ -93,7 +101,13 @@ export function createStarryNightScene(
   flowTex.needsUpdate = true;
   const skyMat = keep(
     new THREE.ShaderMaterial({
-      uniforms: { uSky: { value: skyTex }, uFlow: { value: flowTex }, uTime: time },
+      uniforms: {
+        uSky: { value: skyTex },
+        uRelief: { value: reliefTex },
+        uFlow: { value: flowTex },
+        uTexel: { value: texel },
+        uTime: time,
+      },
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
@@ -106,12 +120,37 @@ export function createStarryNightScene(
         }`,
       fragmentShader: /* glsl */ `
         uniform sampler2D uSky;
+        uniform sampler2D uRelief;
         uniform sampler2D uFlow;
+        uniform vec2 uTexel;
         uniform float uTime;
         varying vec3 vDir;
         const float PI = 3.14159265;
         const float EL_MIN = ${SKY_EL_MIN.toFixed(5)};
         const float EL_MAX = ${SKY_EL_MAX.toFixed(5)};
+        // Light raking across the paint from the upper right, where the moon is.
+        const vec3 LIGHT = vec3(${new THREE.Vector3(0.55, 0.5, 0.67)
+          .normalize()
+          .toArray()
+          .map((v) => v.toFixed(4))
+          .join(", ")});
+
+        // The paint at a point, lit as if it stood up off the canvas.
+        vec3 paint(vec2 uv) {
+          vec3 col = texture2D(uSky, uv).rgb;
+          float h = texture2D(uRelief, uv).r;
+          float hx = texture2D(uRelief, uv + vec2(uTexel.x * 1.5, 0.0)).r;
+          float hy = texture2D(uRelief, uv + vec2(0.0, uTexel.y * 1.5)).r;
+          vec3 n = normalize(vec3((h - hx) * 2.2, (h - hy) * 2.2, 1.0));
+          // Flat paint keeps its colour; slopes turn toward or away from the light.
+          float lit = 0.35 + 0.65 * max(dot(n, LIGHT), 0.0) / LIGHT.z;
+          // The wet sheen on a ridge that faces the light.
+          float sheen = pow(max(dot(reflect(-LIGHT, n), vec3(0.0, 0.0, 1.0)), 0.0), 18.0);
+          // Down in the grooves between strokes, less light reaches.
+          float hollow = mix(0.62, 1.0, smoothstep(0.05, 0.5, h));
+          return col * lit * hollow + sheen * 0.22 * (0.4 + col);
+        }
+
         void main() {
           vec3 d = normalize(vDir);
           float az = atan(d.x, -d.z);
@@ -125,8 +164,8 @@ export function createStarryNightScene(
           // Two copies of the paint, each sliding along the flow and fading out before it jumps back.
           float t0 = fract(uTime * 0.045);
           float t1 = fract(uTime * 0.045 + 0.5);
-          vec3 c0 = texture2D(uSky, uv - step * amp * (t0 - 0.5)).rgb;
-          vec3 c1 = texture2D(uSky, uv - step * amp * (t1 - 0.5)).rgb;
+          vec3 c0 = paint(uv - step * amp * (t0 - 0.5));
+          vec3 c1 = paint(uv - step * amp * (t1 - 0.5));
           vec3 col = mix(c0, c1, abs(t0 - 0.5) * 2.0);
           gl_FragColor = vec4(col, 1.0);
           #include <colorspace_fragment>

@@ -56,17 +56,33 @@ function nearestLight(az: number, el: number): { kind: "star" | "moon"; d: numbe
   return best;
 }
 
+/** A grey for the height map: 0 is the bare canvas, 1 the thickest paint. */
+const grey = (h: number) => {
+  const v = Math.round(Math.max(0, Math.min(1, h)) * 255);
+  return `rgb(${v},${v},${v})`;
+};
+
 /**
  * Paints the sky panorama. `width` is the canvas's width (all 360°); its
- * height keeps pixels square. Returns the canvas ready to use as a texture.
+ * height keeps pixels square. Returns the colour, and a height map of the
+ * same strokes (each a raised ridge with the grooves its bristles left), so
+ * a shader can light the paint as if it stood up off the canvas.
  */
-export function paintSky(width: number): HTMLCanvasElement {
+export function paintSky(width: number): { color: HTMLCanvasElement; relief: HTMLCanvasElement } {
   const W = width;
   const H = Math.round((W * (SKY_EL_MAX - SKY_EL_MIN)) / (Math.PI * 2));
   const c = document.createElement("canvas");
   c.width = W;
   c.height = H;
   const g = c.getContext("2d")!;
+  const r = document.createElement("canvas");
+  r.width = W;
+  r.height = H;
+  const hg = r.getContext("2d")!;
+  hg.fillStyle = grey(0.08);
+  hg.fillRect(0, 0, W, H);
+  hg.lineCap = "round";
+  hg.lineJoin = "round";
   const pxPerRad = W / (Math.PI * 2);
   const toX = (az: number) => (wrap(az) / (Math.PI * 2) + 0.5) * W;
   const toY = (el: number) => (1 - (el - SKY_EL_MIN) / (SKY_EL_MAX - SKY_EL_MIN)) * H;
@@ -82,8 +98,18 @@ export function paintSky(width: number): HTMLCanvasElement {
   g.lineCap = "round";
   g.lineJoin = "round";
 
-  /** A stroke that follows the flow from (az, el), drawn twice where it crosses the seam. */
-  const stroke = (az: number, el: number, len: number, width: number, color: string) => {
+  /**
+   * A stroke that follows the flow from (az, el), drawn again where it crosses
+   * the seam. `relief` is how thick the paint stands (0 lays it flat).
+   */
+  const stroke = (
+    az: number,
+    el: number,
+    len: number,
+    width: number,
+    color: string,
+    relief = 0,
+  ) => {
     const steps = 4;
     const pts: [number, number][] = [];
     let a = az;
@@ -101,15 +127,39 @@ export function paintSky(width: number): HTMLCanvasElement {
       a += (f.x * step) / Math.max(0.25, Math.cos(e));
       e += f.y * step;
     }
+    // Across the stroke, for the bristle grooves: the normal of its overall direction.
+    const dx = pts[steps][0] - pts[0][0];
+    const dy = pts[steps][1] - pts[0][1];
+    const dl = Math.hypot(dx, dy) || 1;
+    const nx = -dy / dl;
+    const ny = dx / dl;
+    const path = (ctx: CanvasRenderingContext2D, shift: number, off: number) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0] + shift + nx * off, pts[0][1] + ny * off);
+      for (let i = 1; i < pts.length; i++)
+        ctx.lineTo(pts[i][0] + shift + nx * off, pts[i][1] + ny * off);
+      ctx.stroke();
+    };
     g.strokeStyle = color;
     g.lineWidth = width;
     for (const shift of [0, -W, W]) {
       const xs = pts.map((p) => p[0] + shift);
       if (Math.max(...xs) < -width || Math.min(...xs) > W + width) continue;
-      g.beginPath();
-      g.moveTo(xs[0], pts[0][1]);
-      for (let i = 1; i < pts.length; i++) g.lineTo(xs[i], pts[i][1]);
-      g.stroke();
+      path(g, shift, 0);
+      if (relief <= 0) continue;
+      // The ridge: a shoulder, then the crown, then a groove or two the bristles dragged.
+      hg.strokeStyle = grey(relief * 0.6);
+      hg.lineWidth = width;
+      path(hg, shift, 0);
+      hg.strokeStyle = grey(relief);
+      hg.lineWidth = width * 0.55;
+      path(hg, shift, 0);
+      if (width > 3) {
+        hg.strokeStyle = grey(relief * 0.55);
+        hg.lineWidth = Math.max(0.8, width * 0.1);
+        path(hg, shift, width * 0.2);
+        path(hg, shift, -width * 0.3);
+      }
     }
   };
 
@@ -136,7 +186,7 @@ export function paintSky(width: number): HTMLCanvasElement {
     const base = groundTone(el);
     const col = rand() < s ? lerp(base, pick(swirl), 0.55) : lerp(base, pick(deep), 0.35);
     g.globalAlpha = 0.35;
-    stroke(az, el, 0.06 + rand() * 0.04, (8 + rand() * 6) * scale, css(col));
+    stroke(az, el, 0.06 + rand() * 0.04, (8 + rand() * 6) * scale, css(col), 0.18 + rand() * 0.1);
   }
   g.globalAlpha = 1;
 
@@ -148,6 +198,7 @@ export function paintSky(width: number): HTMLCanvasElement {
     let col: RGB;
     let len = 0.022 + rand() * 0.03;
     let width = (4.5 + rand() * 4) * scale;
+    let relief = 0.55 + rand() * 0.35;
     if (light?.kind === "star") {
       col =
         light.d < 0.45
@@ -168,9 +219,10 @@ export function paintSky(width: number): HTMLCanvasElement {
       if (rand() < 0.12) {
         col = rgb("#0c1c4a");
         width *= 0.55;
+        relief = 0.2;
       }
     }
-    stroke(az, el, len, width, css(col, 0.9 + rand() * 0.2));
+    stroke(az, el, len, width, css(col, 0.9 + rand() * 0.2), relief);
   }
 
   /** Rings of short dabs round a light, alternating its colours, as each star is painted. */
@@ -189,6 +241,7 @@ export function paintSky(width: number): HTMLCanvasElement {
           dab * (0.8 + rand() * 0.4),
           (4 + rand() * 3) * scale,
           css(pick(colors[k]), 0.92 + rand() * 0.16),
+          0.8 + rand() * 0.2,
         );
       }
     }
@@ -224,6 +277,14 @@ export function paintSky(width: number): HTMLCanvasElement {
       g.beginPath();
       g.arc(x + shift, y, rr, 0, Math.PI * 2);
       g.fill();
+      // A thick, round dab of paint at the core.
+      const hgrad = hg.createRadialGradient(x + shift, y, 0, x + shift, y, rr * 0.7);
+      hgrad.addColorStop(0, grey(1));
+      hgrad.addColorStop(1, grey(0.6));
+      hg.fillStyle = hgrad;
+      hg.beginPath();
+      hg.arc(x + shift, y, rr * 0.7, 0, Math.PI * 2);
+      hg.fill();
     }
   };
   for (const s of STARS) disc(s.az, s.el, 0.016 * s.size, "#fffdf0", "rgba(248,226,122,0)");
@@ -245,7 +306,7 @@ export function paintSky(width: number): HTMLCanvasElement {
   g.fill();
   g.restore();
 
-  return c;
+  return { color: c, relief: r };
 }
 
 /**
