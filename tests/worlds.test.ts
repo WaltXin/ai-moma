@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SCENES } from "@/components/worlds/scenes";
 import { getWorlds } from "@/lib/museum/registry";
 import { PLACES } from "@/lib/worlds/places";
+import * as SUN from "@/lib/worlds/sunflowers";
 import * as WHEAT from "@/lib/worlds/wheat-field";
 import { WORLD_REQUEST_TEMPLATE, worldRequestUrl } from "@/lib/worlds/request";
 import {
@@ -160,5 +161,45 @@ describe("the Wheat Field", () => {
   it("paints clouds where the clouds are, and clear sky between", () => {
     for (const c of W.CLOUDS) expect(W.cloudAt(c.az, c.el)).toBeCloseTo(1, 5);
     expect(W.cloudAt(0, Math.PI / 2 - 0.05)).toBeLessThan(0.5);
+  });
+});
+
+describe("the Sunflowers table", () => {
+  const S = SUN;
+
+  it("hangs fifteen sunflowers over the jug, in every stage of their lives", () => {
+    expect(S.FLOWERS).toHaveLength(15);
+    const stages = new Set(S.FLOWERS.map((f) => f.stage));
+    expect([...stages].sort()).toEqual(["bloom", "open", "seed", "wilting"]);
+    // Every head is high above a small visitor, clear of the jug's body.
+    for (const f of S.FLOWERS) {
+      expect(f.y - f.r, `flower ${f.seed}`).toBeGreaterThan(10);
+      const out = Math.hypot(f.x, f.z);
+      expect(out > S.JUG_RADIUS || f.y > S.JUG_TOP, `flower ${f.seed}`).toBe(true);
+    }
+  });
+
+  it("faces every head somewhere, at unit length", () => {
+    for (const f of S.FLOWERS) {
+      const d = S.facing(f);
+      expect(Math.hypot(d.x, d.y, d.z)).toBeCloseTo(1, 5);
+    }
+  });
+
+  it("keeps the visitor on the table and out of the jug", () => {
+    expect(S.blocked(S.JUG.x, S.JUG.z)).toBe(true);
+    // The table's edge drops to the floor, beyond where they may walk.
+    expect(S.heightAt(0, S.TABLE.front + 10)).toBeLessThan(-50);
+    expect(S.insideBounds(0, S.TABLE.front + 1)).toBe(false);
+    expect(S.insideBounds(S.TABLE.half + 1, 0)).toBe(false);
+    const c = S.clampToBounds(500, 500);
+    expect(S.insideBounds(c.x, c.z, 0.4)).toBe(true);
+  });
+
+  it("drops its fallen petals on the table, clear of the jug", () => {
+    for (const p of S.FALLEN) {
+      expect(Math.abs(S.heightAt(p.x, p.z))).toBeLessThan(1e-9);
+      expect(Math.hypot(p.x - S.JUG.x, p.z - S.JUG.z)).toBeGreaterThan(S.JUG_RADIUS);
+    }
   });
 });

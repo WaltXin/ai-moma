@@ -274,6 +274,16 @@ Alpilles as ridges, two flame trees, an olive and green bushes covered in raised
 painted surface standing hip-high over the ground and waving in the wind, that the visitor
 wades through.
 
+The third, _Sunflowers_ (`sunflowers`), is a still life, so it makes the visitor small: the
+yellow table is the ground (a painted wall of crosshatching behind it, a long drop at its front
+edge), the jug stands 28 m tall, and fifteen sunflowers hang overhead at their own stages of
+life (`FLOWERS`: in bloom, open, wilting, gone to seed). Everything raised is one mesh of
+stroke ribbons (`strokeRibbons`, `strokeMaterial`): the jug's glaze in vertical strokes with
+its blue line and signature, each seed head a spiral of thick dabs, each petal three strokes
+side by side (its colour, a lighter edge, a darker ochre one), leaves, and petals fallen on
+the table. Colours given as 0–255 sRGB go through `setRGB(…, SRGBColorSpace)`: handed to
+`new THREE.Color(r, g, b)` they're taken as linear and come out washed pale.
+
 ### Adding a world
 
 1. Add the painting to `src/content/worlds.ts` (public domain only; `validateMuseum()` checks

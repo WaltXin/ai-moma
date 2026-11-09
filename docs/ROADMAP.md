@@ -48,9 +48,10 @@ Rough order. Each item is a good first PR area.
 - [x] A world kit (`src/components/worlds/kit.ts`) and a standard every world meets
       (`docs/ARCHITECTURE.md`), so any painting can be raised like the Starry Night
 - [x] Second world: _Wheat Field with Cypresses_, wading through the wheat under turning clouds
-- [ ] More painting worlds (public domain only): Sunflowers (a still life: decide what the
-      visitor does there first), Seurat's Grande Jatte (dots; but it's full of people),
-      Monet's water lilies (water and reflections are new)
+- [x] Third world: _Sunflowers_, with the visitor made small: walk the table under fifteen
+      sunflowers as big as trees, every one at its own stage of life
+- [ ] More painting worlds (public domain only): Seurat's Grande Jatte (dots; but it's full of
+      people), Monet's water lilies (water and reflections are new)
 - [ ] Paint the Starry Night village's trees with raised strokes too, as the Wheat Field's bushes are
 - [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)
 - [ ] Real visitors in a world, quietly: see who else is sitting on the hill right now (no made-up ones)
