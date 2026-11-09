@@ -6,9 +6,10 @@ import { Arrow } from "@/components/gallery/wall-parts";
 import { getAudio, startAudio } from "@/components/walk/audio";
 import { Stick } from "@/components/walk/stick";
 import type { PaintingWorld } from "@/lib/museum/types";
-import { NIGHT_MOOD, START, blocked, clampToBounds, heightAt } from "@/lib/worlds/starry-night";
+import { getPlace } from "@/lib/worlds/places";
 import { Creators } from "./creators";
-import type { WorldScene } from "./starry-night-scene";
+import type { WorldScene } from "./kit";
+import { SCENES } from "./scenes";
 
 /**
  * Stepping into a painting. Walk the place with WASD / the arrow keys, the
@@ -54,6 +55,8 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 type Mode = "loading" | "ready" | "unsupported";
 
 export function WorldView({ world }: { world: PaintingWorld }) {
+  const place = getPlace(world.slug);
+  const { start, mood } = place;
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,10 +77,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   const covering = fullscreen || immersive;
 
   const game = useRef({
-    x: START.x,
-    z: START.z,
-    yaw: START.yaw,
-    pitch: START.pitch,
+    x: start.x,
+    z: start.z,
+    yaw: start.yaw,
+    pitch: start.pitch,
     keys: new Set<string>(),
     stick: { x: 0, y: 0 },
     goal: null as { x: number; z: number } | null,
@@ -126,12 +129,12 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     const coarse = window.matchMedia("(pointer: coarse)").matches;
 
     const run = async () => {
-      const { createStarryNightScene } = await import("./starry-night-scene");
+      const makeScene = await SCENES[world.slug]();
       if (cancelled) return;
       setTouch(coarse);
       try {
         // Painted a little at a time, so the welcome stays responsive meanwhile.
-        const made = await createStarryNightScene(canvas, { low: coarse });
+        const made = await makeScene(canvas, { low: coarse });
         if (cancelled) {
           made.dispose();
           return;
@@ -198,19 +201,19 @@ export function WorldView({ world }: { world: PaintingWorld }) {
           }
         }
         if (mx || mz) {
-          // Slide round the cypress; stay on the hilltop.
+          // Slide round trees; stay where the world lets you walk.
           let nx = g.x + mx;
           let nz = g.z + mz;
-          if (blocked(nx, nz)) {
-            if (!blocked(nx, g.z)) nz = g.z;
-            else if (!blocked(g.x, nz)) nx = g.x;
+          if (place.blocked(nx, nz)) {
+            if (!place.blocked(nx, g.z)) nz = g.z;
+            else if (!place.blocked(g.x, nz)) nx = g.x;
             else {
               nx = g.x;
               nz = g.z;
               g.goal = null;
             }
           }
-          const c = clampToBounds(nx, nz);
+          const c = place.clampToBounds(nx, nz);
           g.stride += Math.hypot(c.x - g.x, c.z - g.z);
           g.x = c.x;
           g.z = c.z;
@@ -230,7 +233,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         }
         const moving = Boolean(mx || mz);
         const bob = moving ? Math.sin(g.stride * 4.2) * 0.025 : 0;
-        const y = heightAt(g.x, g.z) + EYE - (EYE - SIT_EYE) * smooth(g.sit) + bob;
+        const y = place.heightAt(g.x, g.z) + EYE - (EYE - SIT_EYE) * smooth(g.sit) + bob;
         scene!.frame({ x: g.x, y, z: g.z, yaw: g.yaw, pitch: g.pitch }, dt);
         raf = requestAnimationFrame(tick);
       };
@@ -251,8 +254,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
       scene?.dispose();
       sceneRef.current = null;
       document.removeEventListener("fullscreenchange", onFull);
-      getAudio()?.release(NIGHT_MOOD);
+      getAudio()?.release(mood);
     };
+    // One world per mount: the page remounts the view for another world.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Full screen starts the countdown to fading the controls afresh.
@@ -277,7 +282,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   const enter = (withSound: boolean) => {
     const audio = startAudio(withSound);
     audio?.setMuted(!withSound);
-    audio?.play(NIGHT_MOOD);
+    audio?.play(mood);
     audio?.setPlace("room");
     setSound(withSound && Boolean(audio));
     setEntered(true);
@@ -291,7 +296,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     if (!audio) return;
     const on = audio.muted;
     audio.setMuted(!on);
-    audio.play(NIGHT_MOOD);
+    audio.play(mood);
     audio.setPlace("room");
     setSound(on);
   };
@@ -390,7 +395,8 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         onKeyUp={onKeyUp}
         onBlur={() => game.current.keys.clear()}
         aria-label={`${world.title} in 3D. Use W and S or the up and down arrows to walk, A and D to step sideways, the left and right arrows to turn, and C to sit down or stand up.`}
-        className={`relative w-full overflow-hidden bg-[#0e1a3d] outline-none ${
+        style={{ background: place.background }}
+        className={`relative w-full overflow-hidden outline-none ${
           covering ? "h-full" : "h-[max(460px,calc(100dvh-4.1rem))]"
         } ${quiet ? "cursor-none" : ""}`}
       >
@@ -482,8 +488,8 @@ export function WorldView({ world }: { world: PaintingWorld }) {
             {hint && (
               <p className="absolute top-14 left-3 max-w-xs bg-black/45 px-3 py-2 text-sm text-white backdrop-blur-sm">
                 {touch
-                  ? "Drag to look around. Walk with the stick, or tap the grass to walk there."
-                  : "Drag to look around. Walk with WASD or the arrow keys, or click the grass. Press C to sit."}
+                  ? `Drag to look around. Walk with the stick, or tap ${place.ground} to walk there.`
+                  : `Drag to look around. Walk with WASD or the arrow keys, or click ${place.ground}. Press C to sit.`}
               </p>
             )}
 

@@ -225,26 +225,65 @@ sit and stare in museums, so give a few paintings a place to do that inside them
 credits its makers (`creators` in `src/content/worlds.ts`) on the way in and under it.
 
 ```
-src/content/worlds.ts          PaintingWorld: title, artist, year, where the real one hangs, its room here
-src/lib/worlds/<slug>.ts       the layout as data: ground, sky swirls, stars, village, cypress
-src/components/worlds/         the scene (three.js), its brushwork (canvas), and WorldView (controls, sit, sound)
+src/content/worlds.ts                 PaintingWorld: title, artist, year, where the real one hangs, its room here
+src/lib/worlds/<slug>.ts              the layout as data, and its WorldPlace: start, ground, bounds, music
+src/lib/worlds/places.ts              every world's place, by slug
+src/components/worlds/brush.ts        painters: a sky panorama, any surface, brushwork tiles, relief → normal maps
+src/components/worlds/kit.ts          the world kit: stage, painted sky, ground, ridges, flame trees, bushes
+src/components/worlds/<slug>-scene.ts a world's scene: the kit's pieces, plus what only it has
+src/components/worlds/scenes.ts       every world's scene, by slug, loaded on demand
+src/components/worlds/world-view.tsx  walking, sitting, sound and controls, the same for every world
 ```
 
-The first is _The Starry Night_ (`starry-night`). Its sky is one panorama painted on a canvas
-at load time: about 70,000 short strokes, each following a flow field (a rolling wave bent
-round each vortex and ringed round each star). Every stroke is also drawn on a height map,
-as a raised ridge with the grooves its bristles left, and the shader lights that relief from
-the moon's side, so the paint stands up off the canvas like impasto. The shader keeps the
-strokes sliding along that flow, so the sky never stops moving.
+### How a world is painted
 
-The land is painted the same way (`paintSurface` in `brush.ts`): the ground seen from above,
-its strokes following the hill's contours (`landFlow`) in the palette in `LAND`, a finer canvas
-for the hilltop and a coarser one for the valley; each ridge of hills along its own line. Each
-height map becomes a normal map, so lit paint keeps its relief at any distance, and near the
-visitor a fine tile of bristle marks is laid over the hilltop. The cypress is a few thousand
-raised strokes laid up dark tongues of flame. Houses and trees carry a brushwork tile and a dark
-outline. The canvases paint a few thousand strokes at a time (`breathe`), so the page stays
-responsive while the world is built.
+Everything in a world is made of paint strokes, laid one by one on canvases at load time, and
+each painter also draws the strokes on a height map, as raised ridges with the grooves the
+bristles left. Lit, the paint stands up off the canvas like impasto.
+
+- **Sky** (`addSky`, `paintSky`): one panorama of tens of thousands of short strokes following
+  a flow field (a rolling wave bent round each vortex, ringed round each light; `flowAround`
+  in `src/lib/worlds/sky.ts`). A `SkySpec` gives its colours, where it's paler (`swirlAt`)
+  and its lights (stars, a moon, a sun) with their rings, cores and glows. A shader lights
+  the relief and keeps the strokes sliding along the flow, so the sky never stops moving.
+- **Ground** (`addGround`, `paintSurface`): a height field painted from above, its strokes
+  following a world's own flow (for the Starry Night hill, its contours: `landFlow`) in a
+  `LandPaint` of its colours. A finer canvas covers where the visitor walks, and a fine tile
+  of bristle marks fades in near them, so the paint still looks like paint at their feet.
+- **Ridges** (`addRidges`): hills ridge behind ridge, each painted along its own line,
+  lighter at the rim, in shadow lower down, with a dark line on top.
+- **Flame trees** (`addFlameTree`): a cypress as tongues of flame twisting up round one
+  another, covered in a few thousand curved, raised strokes, swaying.
+- **Bushes** (`addBushes`): bumpy lumps drawn up into a point, painted, outlined in ink.
+
+Height maps become normal maps (`reliefToNormals`), so paint keeps its relief at any distance.
+Painters lay a few thousand strokes at a time and then let the page breathe (`breathe`), so
+the welcome stays responsive while a world is painted.
+
+The first world is _The Starry Night_ (`starry-night`): a hill above a sleeping village, its
+cypress, and the night sky with eleven stars and the moon.
+
+### Adding a world
+
+1. Add the painting to `src/content/worlds.ts` (public domain only; `validateMuseum()` checks
+   its movement and room, and a room links to its worlds with `getWorldsForRoom`).
+2. Write its layout as data in `src/lib/worlds/<slug>.ts`, with a `WorldPlace`, and add it to
+   `PLACES`. Test it in `tests/worlds.test.ts`.
+3. Write `src/components/worlds/<slug>-scene.ts` from the kit, and add it to `SCENES`.
+4. Hold it to the standard below, and check it in a browser at desktop width and at 390 px.
+
+### The standard every world meets
+
+- **All paint.** Every surface is strokes with relief, never a smooth, flat-shaded mesh.
+- **His strokes.** Strokes run the way the painter's run (the swirls, the contours, the waves
+  of the wheat), at the size he made them, in the painting's own palette.
+- **No black shadows.** What faces away from the light keeps its colour (`glowInShade`), as
+  in a painting.
+- **Up close too.** At the visitor's feet the paint still reads as paint (`withBristles`).
+- **Nothing copied.** No image of the painting is used, not even a public-domain one, and
+  only public-domain paintings get a world.
+- **Light on a phone.** About 2 s to build on a desktop and 60 fps; on a phone (4× CPU
+  throttle) no single block of the main thread longer than about 0.6 s.
 
 **No photograph of the painting is used**, not even a public-domain one. The world is an
 interpretation drawn with code, and the welcome says where the real painting hangs. Only
