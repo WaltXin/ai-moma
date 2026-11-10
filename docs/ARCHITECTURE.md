@@ -88,6 +88,12 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
   Walls are smoothed more along than up (blotches show on plaster; the darkening at the floor
   is real), and `tests/light.test.ts` checks a plain wall stays even.
   In development, `window.__light.force(0 | 1)` switches it off and on to compare.
+- **Audio guides.** Open a work and listen, or read along, in English, French or Chinese.
+  Scripts and their sources are in `src/content/guides.ts`, written to the standard in
+  [AUDIO_GUIDES.md](AUDIO_GUIDES.md). `pnpm guides:voice` records each one once (Cartesia,
+  one request at a time) into `public/guides/`; the walk fetches a work's guide from
+  `/api/guides/[id]` (prerendered) and plays the file. A recording made from an older script
+  is never served.
 - **Plasterwork.** Walls are painted plaster: a faint tint and roller texture tiled every 2 m
   (`plaster()` in `textures.ts`). `lib/walk/trim.ts` plans the mouldings on every face: the
   galleries get a quiet cove and skirting, so the art leads; the lobby and the atrium get an
