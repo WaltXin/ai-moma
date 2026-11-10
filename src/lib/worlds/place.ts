@@ -20,4 +20,43 @@ export type WorldPlace = {
   ground: string;
   /** The colour behind the canvas while the world is painted. */
   background: string;
+  /** What a footstep lands on, for its sound; steps are silent if not given. */
+  footing?: "grass";
+  /** The air of the place, for its sound; still if not given. */
+  air?: Air;
+  /** A colour the corners of the view darken to, as the eye loses the edges at night. */
+  vignette?: string;
 };
+
+/**
+ * What the air of a place sounds like, each from 0 (none) to 1: wind coming
+ * in gusts, crickets in the grass, and a bell tolling far off now and then.
+ */
+export type Air = { wind: number; crickets: number; bell: number };
+
+/** How far behind where they'll stand a visitor comes in from, in metres. */
+const WALK_IN = 4.5;
+
+/**
+ * Where a visitor comes in: a few steps behind `start`, so they arrive by
+ * walking into the place. Falls back to `start` itself where there's no clear
+ * ground behind it.
+ */
+export function arrivalOf(place: WorldPlace): { x: number; z: number } {
+  const { start } = place;
+  // Forward is (−sin yaw, −cos yaw); behind is the other way.
+  const bx = Math.sin(start.yaw);
+  const bz = Math.cos(start.yaw);
+  const at = place.clampToBounds(start.x + bx * WALK_IN, start.z + bz * WALK_IN);
+  const far = Math.hypot(at.x - start.x, at.z - start.z);
+  if (far < 1.5) return { x: start.x, z: start.z };
+  // The way in must be clear, and level enough to walk.
+  for (let i = 0; i <= 8; i++) {
+    const x = start.x + ((at.x - start.x) * i) / 8;
+    const z = start.z + ((at.z - start.z) * i) / 8;
+    if (place.blocked(x, z)) return { x: start.x, z: start.z };
+    if (Math.abs(place.heightAt(x, z) - place.heightAt(start.x, start.z)) > 1.5)
+      return { x: start.x, z: start.z };
+  }
+  return at;
+}

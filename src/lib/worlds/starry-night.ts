@@ -35,7 +35,7 @@ export type House = {
   /** Lit windows on the side facing the hill, as fractions along the front (0–1) and up the wall. */
   windows: { u: number; v: number }[];
 };
-export type Tree = { x: number; z: number; r: number; h: number };
+export type Tree = { x: number; z: number; r: number; h: number; trunk?: number };
 export type Ridge = { z: number; base: number; height: number; seed: number; color: string };
 
 const deg = (d: number) => (d * Math.PI) / 180;
@@ -81,8 +81,29 @@ const smooth = (t: number) => {
 /** The cypress, standing on the hill to the left: tall enough to cut across the sky. */
 export const CYPRESS = { x: -10, z: -23, height: 23, radius: 2.6, trunk: 1.4 };
 
-/** Things a walker can't pass through: the cypress, the old olive by the path. */
-export const OBSTACLES = [{ x: CYPRESS.x, z: CYPRESS.z, r: CYPRESS.trunk + 0.7 }];
+/** The dark bushes the cypress rises out of, at the hill's front edge. */
+export const CYPRESS_BUSHES: Tree[] = [
+  { x: -13.4, z: -23.6, r: 1.7, h: 2.6 },
+  { x: -7.2, z: -24.6, r: 1.5, h: 2.2 },
+  { x: -10.6, z: -26.4, r: 2.1, h: 2.9 },
+];
+
+/** Olives on the hilltop, behind the visitor and out to the sides: something to walk round. */
+export const OLIVES: Tree[] = [
+  { x: -16, z: 9, r: 2.4, h: 3.2, trunk: 1.7 },
+  { x: 9, z: 13, r: 2.7, h: 3.5, trunk: 1.9 },
+  { x: 23, z: 3, r: 2.2, h: 2.9, trunk: 1.6 },
+  { x: -26, z: -3, r: 2, h: 2.7, trunk: 1.5 },
+  { x: 25, z: -13, r: 1.8, h: 2.4, trunk: 1.3 },
+];
+
+/** Things a walker can't pass through: the cypress, its bushes, the olives. */
+export const OBSTACLES = [
+  { x: CYPRESS.x, z: CYPRESS.z, r: CYPRESS.trunk + 0.7 },
+  // A bush is walked round; an olive's leaves are overhead, and only its stem is in the way.
+  ...CYPRESS_BUSHES.map((t) => ({ x: t.x, z: t.z, r: t.r * 0.6 })),
+  ...OLIVES.map((t) => ({ x: t.x, z: t.z, r: t.r * 0.17 + 0.25 })),
+];
 
 export function blocked(x: number, z: number, r = 0.3): boolean {
   return OBSTACLES.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + r);
@@ -218,6 +239,26 @@ export function landFlow(x: number, z: number): [number, number] {
   return [fx / l, fz / l];
 }
 
+/**
+ * How thickly grass stands at (x, z), from 0 (none) to 1: over the hilltop
+ * in patches, thinning down its flanks, none under the trees.
+ */
+export function grassAt(x: number, z: number): number {
+  const q = Math.hypot(x / 60, (z + 4) / 40);
+  const hill = 1 - smooth((q - 0.72) / 0.3);
+  if (hill <= 0) return 0;
+  for (const o of OBSTACLES) if (Math.hypot(x - o.x, z - o.z) < o.r) return 0;
+  // Patches: thick here, nearly bare paint there.
+  const patch =
+    0.68 +
+    0.26 * Math.sin(x * 0.23 + 1.3) * Math.sin(z * 0.19 + 0.4) +
+    0.18 * Math.sin(x * 0.07 - z * 0.11 + 2);
+  return Math.max(0, Math.min(1, hill * patch));
+}
+
+/** The wind over the hill: where it blows to (a unit vector in the ground plane). */
+export const WIND: [number, number] = [0.94, -0.34];
+
 /** The blue hills, ridge behind ridge, the farthest palest. */
 export const RIDGES: Ridge[] = [
   { z: -360, base: 4, height: 34, seed: 3, color: "#3b5f9e" },
@@ -309,4 +350,7 @@ export const STARRY_NIGHT: WorldPlace = {
   mood: NIGHT_MOOD,
   ground: "the grass",
   background: "#0e1a3d",
+  footing: "grass",
+  air: { wind: 0.8, crickets: 0.6, bell: 0.5 },
+  vignette: "#030819",
 };

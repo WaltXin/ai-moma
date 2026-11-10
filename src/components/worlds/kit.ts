@@ -4,6 +4,7 @@ import { worldRandom } from "@/lib/worlds/random";
 import {
   SKY_EL_MAX,
   SKY_EL_MIN,
+  breathe,
   brushTile,
   glow,
   lerp,
@@ -30,7 +31,15 @@ import {
  * is used.
  */
 
-export type View = { x: number; y: number; z: number; yaw: number; pitch: number };
+export type View = {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  /** The head's tilt to one side as it walks, in radians. */
+  roll?: number;
+};
 export type WorldScene = {
   frame(view: View, dt: number): void;
   resize(w: number, h: number): void;
@@ -230,7 +239,7 @@ export function createStage(
         frame(view, dt) {
           time.value += dt;
           camera.position.set(view.x, view.y, view.z);
-          camera.rotation.set(view.pitch, view.yaw, 0);
+          camera.rotation.set(view.pitch, view.yaw, view.roll ?? 0);
           for (const f of onFrame) f(dt);
           renderer.render(scene, camera);
         },
@@ -611,6 +620,152 @@ export async function addGround(
   return mesh;
 }
 
+// ── Grass ──
+
+/** Grass standing on the ground: where, how thick, how tall, its colours, the wind in it. */
+export type Grass = {
+  /** Tufts are tried all over this rectangle, and kept where `densityAt` lets them. */
+  area: Rect;
+  heightAt: (x: number, z: number) => number;
+  /** How thickly it grows at a point, from 0 (none) to 1. */
+  densityAt: (x: number, z: number) => number;
+  /** Tufts per square metre where it's thickest, and blades in each (phones, elsewhere). */
+  perSquareMetre: [number, number];
+  blades: [number, number];
+  /** A blade's length and width, in metres. */
+  length: [number, number];
+  width: [number, number];
+  /** How much bigger a tuft is here than at the visitor's feet (1): far ones are bigger and fewer. */
+  scaleAt?: (x: number, z: number) => number;
+  /** The blades' colours, and the lighter ones some catch at the tip. */
+  colors: string[];
+  tips: string[];
+  tipChance: number;
+  /** Where the wind blows to (a unit vector in the ground plane), and how far it pushes a blade's tip, in blade lengths. */
+  wind: [number, number];
+  push: number;
+  /** How much of its colour a blade keeps in shade. */
+  glow: number;
+  seed: number;
+};
+
+/**
+ * Grass as strokes standing up off the ground: tufts of curved, raised
+ * blades, each one colour, leaning with the wind and bowing as gusts cross
+ * the hill. Walking, the near blades slide past the far ones, which is most
+ * of what tells the eye it's moving through a place.
+ */
+export async function addGrass(stage: Stage, o: Grass) {
+  const { low, keep, painted, scene, time } = stage;
+  await breathe();
+  const n = worldRandom(o.seed);
+  const pick = low ? 0 : 1;
+  const colors = o.colors.map(C);
+  const tips = o.tips.map(C);
+  const pos: number[] = [];
+  const col: number[] = [];
+  const uv: number[] = [];
+  const sway: number[] = [];
+  const idx: number[] = [];
+  const ALONG = 3;
+  const [wx, wz] = o.wind;
+  const tries = Math.round(
+    (o.area.x1 - o.area.x0) * (o.area.z1 - o.area.z0) * o.perSquareMetre[pick],
+  );
+  const c = new THREE.Color();
+  for (let i = 0; i < tries; i++) {
+    const tx = o.area.x0 + n() * (o.area.x1 - o.area.x0);
+    const tz = o.area.z0 + n() * (o.area.z1 - o.area.z0);
+    const k = o.scaleAt?.(tx, tz) ?? 1;
+    // Bigger tufts are fewer, so the cover stays even.
+    if (n() > o.densityAt(tx, tz) / (k * k)) continue;
+    const count = o.blades[pick] - 1 + Math.floor(n() * 3);
+    for (let b = 0; b < count; b++) {
+      const len = (o.length[0] + n() * (o.length[1] - o.length[0])) * k;
+      const width = (o.width[0] + n() * (o.width[1] - o.width[0])) * k;
+      // Blades fan out from the tuft's root, most of them leaning downwind.
+      const a = n() * Math.PI * 2;
+      const out = 0.25 + n() * 0.75;
+      let dx = Math.cos(a) * out + wx * 0.7;
+      let dz = Math.sin(a) * out + wz * 0.7;
+      const dl = Math.hypot(dx, dz) || 1;
+      dx /= dl;
+      dz /= dl;
+      const bow = 0.25 + n() * 0.55;
+      const rx = tx + (n() - 0.5) * 0.16 * k;
+      const rz = tz + (n() - 0.5) * 0.16 * k;
+      const ry = o.heightAt(rx, rz) - 0.04;
+      c.copy(colors[Math.floor(n() * colors.length)]);
+      if (n() < o.tipChance) c.lerp(tips[Math.floor(n() * tips.length)], 0.8);
+      c.multiplyScalar(0.85 + n() * 0.3);
+      const ou = n();
+      const ov = n();
+      const base = pos.length / 3;
+      for (let j = 0; j <= ALONG; j++) {
+        const f = j / ALONG;
+        // Bowing over as it rises, and tapering to its tip.
+        const h = len * bow * f * f;
+        const y = len * (f - 0.3 * bow * f * f);
+        const w = width * (1 - f * f * 0.92);
+        const cx = rx + dx * h;
+        const cz = rz + dz * h;
+        // Across the blade: level, square to the way it leans. Its crown stands off its face.
+        const sx = -dz * (w / 2);
+        const sz = dx * (w / 2);
+        const lift = w * 0.3;
+        pos.push(cx - sx, ry + y, cz - sz);
+        pos.push(cx - dx * lift, ry + y + lift * 0.4, cz - dz * lift);
+        pos.push(cx + sx, ry + y, cz + sz);
+        for (let v = 0; v < 3; v++) {
+          col.push(c.r, c.g, c.b);
+          uv.push(ou + v * 0.06, ov + (f * len) / 1.6);
+          // The higher up the blade, the further the wind moves it.
+          sway.push(f * f * len);
+        }
+        if (j > 0) {
+          const p = base + (j - 1) * 3;
+          const q = p + 3;
+          idx.push(p, q, p + 1, p + 1, q, q + 1, p + 1, q + 1, p + 2, p + 2, q + 1, q + 2);
+        }
+      }
+    }
+  }
+  const g = keep(new THREE.BufferGeometry());
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute("aSway", new THREE.Float32BufferAttribute(sway, 1));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+
+  const tile = await stage.tile(
+    "flame-strokes",
+    { angle: Math.PI / 2, wave: 0.35, len: 4, width: 22, seed: 14, dark: 0.55 },
+    5,
+  );
+  const mat = painted(tile, 1.2, { side: THREE.DoubleSide });
+  customize(mat, `grass:${o.glow}:${o.push}:${wx}:${wz}`, (shader) => {
+    shader.uniforms.uTime = time;
+    shader.vertexShader =
+      `attribute float aSway;\nuniform float uTime;\n${shader.vertexShader}`.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        // Gusts cross the hill in long waves; within one, each blade shivers.
+        float gust = 0.5 + 0.5 * sin(uTime * 0.45 - position.x * 0.06 + position.z * 0.045);
+        float shiver = sin(uTime * 2.1 + position.x * 0.8 + position.z * 0.6)
+          + 0.5 * sin(uTime * 3.7 - position.x * 1.7 + position.z * 1.3);
+        float bend = aSway * ${o.push.toFixed(3)} * (0.25 + gust * (0.75 + 0.3 * shiver));
+        transformed.x += ${wx.toFixed(4)} * bend;
+        transformed.z += ${wz.toFixed(4)} * bend;
+        transformed.y -= bend * 0.35;`,
+      );
+    glowInShade(shader, o.glow);
+  });
+  const mesh = new THREE.Mesh(g, mat);
+  scene.add(mesh);
+  return mesh;
+}
+
 // ── Ridges of hills ──
 
 /** A ridge of hills: a curtain at depth `z`, from `bottom(x)` up to `top(x)`, in `color`. */
@@ -636,6 +791,7 @@ export async function addRidges(
   const { low, keep, paintTextures, painted, paintColor, scene } = stage;
   const RIDGE_SPAN = { x0: -1300, x1: 1300 };
   for (const [ri, r] of ridges.entries()) {
+    await breathe();
     const N = 220;
     const pos: number[] = [];
     const uvs: number[] = [];
@@ -786,6 +942,8 @@ export type FlameTree = {
  */
 export async function addFlameTree(stage: Stage, t: FlameTree) {
   const { low, keep, painted, paintColor, scene, time } = stage;
+  // Each piece of a world is built in one go; a breath between them keeps the page answering.
+  await breathe();
   /** Lets the tree sway, more toward its top. */
   const sway = (shader: THREE.WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = time;
@@ -964,8 +1122,12 @@ export async function strokeMaterial(
   return customize(mat, `strokes:${glow}:${twoSided}`, (shader) => glowInShade(shader, glow));
 }
 
-/** A bush or round tree: where it stands, how wide and how tall. */
-export type Bush = { x: number; z: number; r: number; h: number };
+/**
+ * A bush or round tree: where it stands, how wide and how tall. With
+ * `trunk`, its leaves are held that far off the ground on a bare stem, so
+ * the land shows under them.
+ */
+export type Bush = { x: number; z: number; r: number; h: number; trunk?: number };
 
 /**
  * Bushes and round trees: each a few bumpy lumps drawn up into a point,
@@ -987,6 +1149,8 @@ export async function addBushes(
     edgeChance: number;
     ink: string;
     glow: number;
+    /** The colours of a tree's bare stem, if any has one. */
+    stems?: string[];
     /**
      * Covers each lump in raised strokes flicking upward, over a darker
      * `under`: how many per square metre (phones, elsewhere), and how long
@@ -1016,7 +1180,33 @@ export async function addBushes(
     ph: number;
     t: Bush;
   }[] = [];
-  for (const t of o.bushes) {
+  const stems = (o.stems ?? o.dark).map(C);
+  await breathe();
+  for (const [bi, t] of o.bushes.entries()) {
+    if (bi % 24 === 23) await breathe();
+    const up = t.trunk ?? 0;
+    if (up > 0) {
+      // A stem that leans and twists a little on its way up into the leaves.
+      const tall = up + t.h * 0.4;
+      const stem = new THREE.CylinderGeometry(t.r * 0.09, t.r * 0.17, tall, 7, 4).toNonIndexed();
+      const sp = stem.attributes.position;
+      const ph = n() * 6.3;
+      for (let j = 0; j < sp.count; j++) {
+        const f = sp.getY(j) / tall + 0.5;
+        sp.setX(j, sp.getX(j) + Math.sin(f * 2.4 + ph) * t.r * 0.1);
+        sp.setZ(j, sp.getZ(j) + Math.cos(f * 1.9 + ph) * t.r * 0.08);
+      }
+      stem.translate(t.x, o.heightAt(t.x, t.z) + tall / 2 - 0.25, t.z);
+      stem.computeVertexNormals();
+      treeInk.push(outline(stem, 1.08));
+      // One colour a face, as each lump's strokes are.
+      let c = stems[0];
+      paintColor(stem, (j) => {
+        if (j % 6 === 0) c = stems[Math.floor(n() * stems.length)];
+        return c;
+      });
+      blobs.push(stem);
+    }
     const lumps = 2 + Math.floor(n() * 3);
     for (let k = 0; k < lumps; k++) {
       const b = new THREE.IcosahedronGeometry(1, 2);
@@ -1035,7 +1225,7 @@ export async function addBushes(
       b.scale(t.r * s, (t.h / 2) * s, t.r * s);
       const ox = k === 0 ? 0 : (n() - 0.5) * t.r * 1.4;
       const oz = k === 0 ? 0 : (n() - 0.5) * t.r * 1.0;
-      const cy = o.heightAt(t.x, t.z) + t.h * (0.4 - (k === 0 ? 0 : 0.15));
+      const cy = o.heightAt(t.x, t.z) + up + t.h * (0.4 - (k === 0 ? 0 : 0.15));
       b.translate(t.x + ox, cy, t.z + oz);
       shapes.push({ cx: t.x + ox, cy, cz: t.z + oz, R: t.r * s, H: (t.h / 2) * s, ph, t });
       // Smooth shading across the lumps' facets, then split, so each stroke takes its own colour.
@@ -1070,6 +1260,7 @@ export async function addBushes(
   [...blobs, ...treeInk].forEach((g) => g.dispose());
 
   if (!o.strokes) return;
+  await breathe();
   const st = o.strokes;
   /** A point on a lump: `theta` round it, `phi` up it from its equator, `lift` out from it. */
   const lumpAt = (L: (typeof shapes)[number], theta: number, phi: number, lift: number) => {
@@ -1084,7 +1275,8 @@ export async function addBushes(
   };
   const ribbons = strokeRibbons();
   const ALONG = 4;
-  for (const L of shapes) {
+  for (const [li, L] of shapes.entries()) {
+    if (li % 60 === 59) await breathe();
     // Roughly the lump's skin, above the ground.
     const area = 4 * Math.PI * Math.pow(L.R * L.R * L.H, 2 / 3) * 0.8;
     const count = Math.round(area * st.perSquareMetre[low ? 0 : 1]);

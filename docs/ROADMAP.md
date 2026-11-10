@@ -54,7 +54,10 @@ Rough order. Each item is a good first PR area.
       sunflowers as big as trees, every one at its own stage of life
 - [ ] More painting worlds (public domain only): Seurat's Grande Jatte (dots; but it's full of
       people), Monet's water lilies (water and reflections are new)
-- [ ] Paint the Starry Night village's trees with raised strokes too, as the Wheat Field's bushes are
+- [x] Paint the Starry Night village's trees with raised strokes too, as the Wheat Field's bushes are
+- [x] Walk into a world like a person: come in on foot, with a gait, footfalls and momentum;
+      on the Starry Night hill, grass in the wind, olives to walk round, fireflies, wind,
+      crickets and a far bell
 - [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)
 - [ ] Real visitors in a world, quietly: see who else is sitting on the hill right now (no made-up ones)
 - [ ] VR for the most-loved worlds (WebXR)
