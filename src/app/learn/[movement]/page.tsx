@@ -13,6 +13,7 @@ import {
   getFloorForExhibition,
   getMovement,
   getMovements,
+  getStation,
 } from "@/lib/museum/registry";
 import type { Artwork, Movement } from "@/lib/museum/types";
 
@@ -49,6 +50,7 @@ async function GuideWalls({ params }: { params: PageProps<"/learn/[movement]">["
   if (!movement) notFound();
 
   const { room, floor, wall } = homeOf(movement);
+  const station = getStation(movement.slug);
   const works: Artwork[] = getExhibitionsForMovement(movement.slug)
     .flatMap((r) => r.artworks)
     .filter((a) => stillOf(a));
@@ -172,6 +174,15 @@ async function GuideWalls({ params }: { params: PageProps<"/learn/[movement]">["
                     ))}
                   </ul>
                 </div>
+                {station && (
+                  <div>
+                    <p className="leading-relaxed">{station.blurb}</p>
+                    <Link href={`/studio/${movement.slug}`} className={`${BUTTON} mt-4`}>
+                      {station.title}
+                      <Arrow />
+                    </Link>
+                  </div>
+                )}
                 {movement.studio.status === "available" ? (
                   <div>
                     <p className="leading-relaxed">

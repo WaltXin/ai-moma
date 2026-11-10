@@ -3,6 +3,7 @@ import { floors as allFloors } from "@/content/floors";
 import { guides as allGuides } from "@/content/guides";
 import { guidesAudio } from "@/content/guides-audio.generated";
 import { movements as allMovements } from "@/content/movements";
+import { type StationInfo, stations as allStations } from "@/content/stations";
 import { worlds as allWorlds } from "@/content/worlds";
 import { RECIPES } from "@/lib/studio-art";
 import { GUIDE_LANGS, type GuideLang, guideHash } from "./guides";
@@ -217,4 +218,14 @@ export function getGuide(id: string): Partial<Record<GuideLang, GuideEntry>> | u
     out[lang] = audio && audio.hash === guideHash(text) ? { text, audio: { src: audio.src, seconds: audio.seconds } } : { text };
   }
   return out;
+}
+
+/** A movement's hands-on station (`/studio/<movement>`), if it has one. */
+export function getStation(movement: string): StationInfo | undefined {
+  return allStations[movement];
+}
+
+/** Movements with a hands-on station. */
+export function getStationMovements(): string[] {
+  return Object.keys(allStations);
 }

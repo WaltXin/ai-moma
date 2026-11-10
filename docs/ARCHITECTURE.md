@@ -124,6 +124,13 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
 - A floor can also have a hands-on lab. Floor 7 (`perception`) does: `/floors/perception/walk`
   renders `<PerceptionLab>` (`src/components/perception/`), and in the building a kiosk in the
   Perception Lab room leads there. Add a slug to `FLOOR_LABS` to give another floor its own lab.
+- A movement can have a hands-on station: try its technique, see why it works, keep what you
+  made. Neo-Impressionism does: `/studio/neo-impressionism` ("Paint with dots": mix two colours
+  in the eye, then paint a lawn in sun and shade and read what you used). Its kiosk text lives
+  in `src/content/stations.ts`, its page body in `src/components/stations/pages.tsx`, and the
+  colour science in `src/lib/stations/dots.ts`; the walk puts a kiosk inside the movement's
+  room, opposite the lectern. What a visitor keeps goes to the same exhibition request as the
+  Studio's (`/api/submissions`).
 
 ## Public-domain collection
 

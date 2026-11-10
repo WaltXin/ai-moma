@@ -296,6 +296,11 @@ export function RoomInfo({ room, onClose }: { room: PlanRoom; onClose: () => voi
             Make one in the Studio
           </Link>
         )}
+        {room.movement.station && (
+          <Link href={room.movement.station} className={TEXT_LINK}>
+            Try the technique yourself
+          </Link>
+        )}
         <Link href={`/exhibitions/${room.slug}`} className={TEXT_LINK}>
           See this room as a page
         </Link>
@@ -428,7 +433,14 @@ export function Directory({
 /** A kiosk's screen: where it leads, and the way there. */
 export function PortalPanel({ portal, onClose }: { portal: Portal; onClose: () => void }) {
   const titleId = useId();
-  const label = portal.kind === "studio" ? "Open the Studio" : portal.kind === "lab" ? "Step into the lab" : "Read the guides";
+  const label =
+    portal.kind === "studio"
+      ? "Open the Studio"
+      : portal.kind === "lab"
+        ? "Step into the lab"
+        : portal.kind === "station"
+          ? "Try it"
+          : "Read the guides";
   return (
     <Dialog labelledBy={titleId} onClose={onClose}>
       <h2 id={titleId} className="wall-title pr-10 text-[clamp(2rem,5vw,2.75rem)]">

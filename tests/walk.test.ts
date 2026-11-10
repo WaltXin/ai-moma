@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getExhibitionsOnFloor, getFloors, getMovements } from "@/lib/museum/registry";
+import { getExhibitionsOnFloor, getFloors, getMovements, getStation, getStationMovements } from "@/lib/museum/registry";
 import { type Building, buildBuilding, inRect, spaceAt, stairPart } from "@/lib/walk/building";
 import {
   type Focus,
@@ -23,6 +23,7 @@ const building: Building = buildBuilding({
   exhibitionsOn: getExhibitionsOnFloor,
   movements: getMovements(),
   labs: ["perception"],
+  stations: Object.fromEntries(getStationMovements().map((m) => [m, getStation(m)!])),
 });
 
 /** Walks a route the way the walk does, in small steps; returns where it ends up. */
