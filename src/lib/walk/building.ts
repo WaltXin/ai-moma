@@ -228,8 +228,8 @@ export type Level = {
   rails: Rail[];
   items: Item[];
   spaces: Space[];
-  /** Big lettering on the core wall facing the atrium. */
-  lettering: { x: number; z: number; yaw: number };
+  /** Big lettering on the core wall facing the atrium, `w` wide. */
+  lettering: { x: number; z: number; yaw: number; w: number };
 };
 
 /** Straight flight of stairs from one floor to the next, rising toward `rise`. */
@@ -858,7 +858,7 @@ export function buildBuilding(input: {
       rails: [],
       items,
       spaces,
-      lettering: { x: (WEST + EAST) / 2, z: CORE_Z + INT / 2, yaw: 0 },
+      lettering: { x: (WEST + EAST) / 2, z: CORE_Z + INT / 2, yaw: 0, w: i === 0 ? 11 : 10 },
     };
   });
 

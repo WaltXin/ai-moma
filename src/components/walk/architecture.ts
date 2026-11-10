@@ -10,7 +10,9 @@ import {
   inRect,
 } from "@/lib/walk/building";
 import { BAKE_HIGH, BAKE_LOW, type BakedLevel, type Face, LAYLIGHT_INSET, type LightLayout, ceilingLights, faceFor, faceUv, lightLayout, subtractRect } from "@/lib/walk/light";
+import { type FaceTrim, wallTrim } from "@/lib/walk/trim";
 import { Batch, type Kit, Quads, boxGeometry, placed } from "./kit";
+import { Mouldings, PANEL, SLAB_BASE, SLAB_CAP, casing, grandCornice, plainCornice, skirting } from "./mouldings";
 import { WHITE, paintAt } from "./paint";
 import { floorShade } from "./textures";
 
@@ -263,16 +265,12 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
     return quads;
   };
   const reveals = new Quads();
-  const skirting = new Map<string, Quads>();
-  const skirt = (paint: string) => {
-    let quads = skirting.get(paint);
-    if (!quads) skirting.set(paint, (quads = new Quads()));
-    return quads;
-  };
   const skin = new Quads();
   const y = level.y;
   const top = b.levels.length - 1;
   const bandTop = level.index < top ? b.levels[level.index + 1].y : b.roofY + 1.2;
+  const trims = new Map<string, FaceTrim>();
+  for (const t of wallTrim(b, level)) trims.set(`${t.wall}:${t.side}`, t);
 
   for (const [wi, w] of level.walls.entries()) {
     const H = w.top ?? level.ceiling;
@@ -293,6 +291,25 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
         if (w.outside && w.outside.x === n.x && w.outside.z === n.z) continue;
         const face = faceFor(layout, wi, side as 1 | -1);
         const lm = face && { layout, face, base: y };
+        const ft = trims.get(`${wi}:${side}`);
+        const grand = ft?.style === "grand";
+        // Mouldings on this face, by material, lit by the face's own bake.
+        const plane = { along, line, n, base: y } as const;
+        const surface = {
+          shade: (yy: number) => shadeAt(Math.min(H, Math.max(0, yy)), H),
+          light: face
+            ? (ss: number, yy: number) =>
+                faceUv(layout, face, Math.min(end, Math.max(start, ss)), Math.min(H - 0.01, Math.max(0.01, yy)))
+            : undefined,
+        };
+        const trimBy = new Map<string, Mouldings>();
+        const trim = (key: string) => {
+          let m = trimBy.get(key);
+          if (!m) trimBy.set(key, (m = new Mouldings(plane, surface)));
+          return m;
+        };
+        const paintOn = (ss: number) =>
+          paintAt(level, along === "x" ? { x: ss, z: line + n.z * 0.3 } : { x: line + n.x * 0.3, z: ss });
         // Paint follows the room each stretch of wall faces.
         const STEP = 0.25;
         const breaks = new Set<number>([start, end]);
@@ -328,12 +345,68 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
             if (p1 - p0 < 1e-3) continue;
             shadedUpright(q(paint), n, line, s0, s1, y, p0, p1, H, lm);
           }
-          if (!hole || hole.bottom > 0.05) {
-            // A skirting board, standing just proud of the wall.
-            const sk = skirt(paint);
-            upright(sk, n, line + (n.x + n.z) * 0.012, s0, s1, y, y + 0.1, 0.9, 1, lm);
+          if (ft && (!hole || hole.bottom > 0.05)) {
+            // A skirting board along the foot of the wall.
+            trim(`skirting:${paint}`).sweep([[s0, 0], [s1, 0]], skirting(ft.skirting, grand));
+          }
+          if (ft && ft.cornice > 0 && (!hole || hole.top < H - ft.cornice - 0.01)) {
+            // A cornice where the wall meets the ceiling.
+            trim(`plaster:${paint}`).sweep([[s0, H], [s1, H]], grand ? grandCornice(ft.cornice) : plainCornice(ft.cornice));
           }
         }
+        if (ft) {
+          // Casings round the doorways.
+          for (const c of ft.casings) {
+            const paint = paintOn(c.a - c.width / 2) ?? paintOn(c.b + c.width / 2);
+            if (!paint) continue;
+            const m = trim(`plaster:${paint}`);
+            m.sweep(
+              [
+                [c.a, 0],
+                [c.a, c.top],
+                [c.b, c.top],
+                [c.b, 0],
+              ],
+              casing(c.width, grand),
+            );
+            if (grand) {
+              // A plinth block at the foot of each side, taking the skirting.
+              m.block(c.a - c.width - 0.012, c.a, 0, ft.skirting + 0.05, 0.045);
+              m.block(c.b, c.b + c.width + 0.012, 0, ft.skirting + 0.05, 0.045);
+            }
+          }
+          // Pilasters, with a base and a capital under the cornice.
+          const capTop = H - ft.cornice;
+          for (const p of ft.pilasters) {
+            const paint = paintOn(p);
+            if (!paint) continue;
+            const m = trim(`plaster:${paint}`);
+            m.block(p - 0.31, p + 0.31, 0, 0.24, 0.085);
+            m.block(p - 0.28, p + 0.28, 0.24, 0.3, 0.07);
+            m.block(p - 0.25, p + 0.25, 0.3, capTop - 0.3, 0.055);
+            m.block(p - 0.27, p + 0.27, capTop - 0.3, capTop - 0.24, 0.065);
+            m.block(p - 0.29, p + 0.29, capTop - 0.24, capTop - 0.12, 0.075);
+            m.block(p - 0.32, p + 0.32, capTop - 0.12, capTop, 0.09);
+          }
+          // Blind arches between them.
+          for (const pn of ft.panels) {
+            const paint = paintOn((pn.a + pn.b) / 2);
+            if (!paint) continue;
+            const r = (pn.b - pn.a) / 2;
+            const spring = pn.y1 - r;
+            const head: [number, number][] = [];
+            if (pn.arch) {
+              for (let i = 0; i <= 16; i++) {
+                const t = (i / 16) * Math.PI;
+                head.push([pn.a + r + r * Math.cos(t), spring + r * Math.sin(t)]);
+              }
+            } else {
+              head.push([pn.b, pn.y1], [pn.a, pn.y1]);
+            }
+            trim(`plaster:${paint}`).sweep([[pn.a, pn.y0], [pn.b, pn.y0], ...head], PANEL, true);
+          }
+        }
+        for (const [key, m] of trimBy) if (!m.empty) baked.push(key, m.build());
       }
       // The ends of the wall, and every reveal round its openings.
       for (const [s, dir] of [
@@ -399,7 +472,6 @@ function buildWalls(k: Kit, b: Building, level: Level, batch: Batch, shared: Bat
     }
   }
   for (const [paint, quads] of plaster) baked.push(`plaster:${paint}`, quads.build());
-  for (const [paint, quads] of skirting) baked.push(`skirting:${paint}`, quads.build());
   if (!reveals.empty) batch.push(`plaster:${WHITE}`, reveals.build());
   if (!skin.empty) shared.push("facade", skin.build());
 }
@@ -642,8 +714,15 @@ function buildEdges(b: Building, level: Level, batch: Batch) {
         : { x: 1, z: 0 };
     const line = alongX ? r.z0 : r.x0;
     const [s0, s1] = alongX ? [r.x0, r.x1] : [r.z0, r.z1];
-    // The slab's edge, seen from the atrium (not on the ground or out on the street).
-    if (level.index > 0) upright(edge, out, line, s0, s1, y - SLAB, y + 0.02);
+    // The slab's edge, seen from the atrium (not on the ground or out on the street),
+    // moulded like an entablature: a cap along its top, a step along its underside.
+    if (level.index > 0) {
+      upright(edge, out, line, s0, s1, y - SLAB, y + 0.02);
+      const m = new Mouldings({ along: alongX ? "x" : "z", line, n: out, base: y }, { shade: () => 1 });
+      m.sweep([[s0, 0.02], [s1, 0.02]], SLAB_CAP);
+      m.sweep([[s0, -SLAB], [s1, -SLAB]], SLAB_BASE);
+      batch.push("slab", m.build());
+    }
     // Glass balustrade: a steel shoe, a pane, an oak handrail.
     const inset = 0.06;
     const lineIn = line - (out.x + out.z) * inset;

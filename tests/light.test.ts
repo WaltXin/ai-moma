@@ -136,5 +136,25 @@ describe("baked light", () => {
       expect(at(x, 1.6)).toBeGreaterThan(at(r.x0 + 0.2, 0.15) * 1.3);
       expect(inRect(r, { x, z: r.z0 + 0.1 })).toBe(true);
     });
+
+    it("keeps a plain wall even: gradients, but no blotches", () => {
+      // The core wall, seen from the atrium, left of the floor's name.
+      const wi = level.walls.findIndex((w) => w.z0 === w.z1 && w.z0 === 10);
+      const f = faceFor(layout, wi, 1)!;
+      const d = BAKE_LOW.wall;
+      const at = (x: number, v: number) =>
+        light(
+          baked.atlas,
+          ((f.y + 1 + Math.floor(v * d)) * layout.atlas.width + f.x + 1 + Math.floor((x - f.start) * d)) * 4,
+        );
+      // Light may rise or fall along the wall, but not bump up and down within a metre.
+      let bump = 0;
+      for (const v of [1.2, 1.6, 2.4]) {
+        for (let x = 13; x <= 17; x += 0.2) {
+          bump = Math.max(bump, Math.abs(at(x - 0.4, v) + at(x + 0.4, v) - 2 * at(x, v)) / at(x, v));
+        }
+      }
+      expect(bump).toBeLessThan(0.12);
+    });
   });
 });
