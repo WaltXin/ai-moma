@@ -3,7 +3,7 @@
 import type { GuidesAudio } from "@/lib/museum/guides";
 
 export const guidesAudio: GuidesAudio = {
-  en: { "aic-27992": { src: "/guides/en/aic-27992.mp3", seconds: 82.2, hash: "ca468174" } },
-  fr: { "aic-27992": { src: "/guides/fr/aic-27992.mp3", seconds: 72.5, hash: "b6ba41cb" } },
-  zh: { "aic-27992": { src: "/guides/zh/aic-27992.mp3", seconds: 80.2, hash: "ec82ea30" } },
+  en: { "aic-27992": { src: "/guides/en/aic-27992.mp3", seconds: 88.3, hash: "139ca6a0" } },
+  fr: { "aic-27992": { src: "/guides/fr/aic-27992.mp3", seconds: 82, hash: "c693e3d6" } },
+  zh: { "aic-27992": { src: "/guides/zh/aic-27992.mp3", seconds: 92.3, hash: "cfc0b233" } },
 };
