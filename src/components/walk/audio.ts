@@ -1,4 +1,5 @@
 import { type Mood, type Surface, hz, nextDegree, noteOf } from "@/lib/walk/music";
+import type { Air } from "@/lib/worlds/place";
 
 /**
  * The museum's sound, made live with the Web Audio API: a generative score in
@@ -102,7 +103,10 @@ export class MuseumAudio {
   private readonly car: GainNode;
   private readonly carPan: StereoPannerNode;
   private readonly carTone: BiquadFilterNode;
-  private place: "outside" | "hall" | "room" = "room";
+  private readonly brown: AudioBuffer;
+  /** The air of a painting world, while the visitor is in one: wind, crickets, a far bell. */
+  private airNow: { out: GainNode; stop(): void; silence(): void } | null = null;
+  private place: "outside" | "hall" | "room" | "open" = "room";
   private score: Score | null = null;
   private mood: Mood | null = null;
   private suspendTimer = 0;
@@ -143,6 +147,7 @@ export class MuseumAudio {
 
     // The building's hum: brown noise, low and soft, always there.
     const brown = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate);
+    this.brown = brown;
     const b = brown.getChannelData(0);
     let last = 0;
     for (let i = 0; i < b.length; i++) {
@@ -245,6 +250,7 @@ export class MuseumAudio {
     const t = this.ctx.currentTime;
     for (const g of [this.hum, this.murmur, this.street, this.car])
       g.gain.setTargetAtTime(0, t, 0.4);
+    this.air(null);
     this.place = "room";
   }
 
@@ -265,21 +271,159 @@ export class MuseumAudio {
 
   /**
    * Where the visitor is: out in the street (traffic, no echo, the music far
-   * off), in a big hall (long echo, a murmur of voices) or in a room.
+   * off), in a big hall (long echo, a murmur of voices), in a room, or out in
+   * the open in a painting (no building round them at all).
    */
-  setPlace(place: "outside" | "hall" | "room") {
+  setPlace(place: "outside" | "hall" | "room" | "open") {
     if (place === this.place) return;
     this.place = place;
     const t = this.ctx.currentTime;
     this.reverbOut.gain.setTargetAtTime(
-      place === "outside" ? 0.08 : place === "hall" ? 0.75 : 0.45,
+      place === "outside" ? 0.08 : place === "hall" ? 0.75 : place === "open" ? 0.3 : 0.45,
       t,
       0.6,
     );
     this.murmur.gain.setTargetAtTime(place === "hall" ? 0.05 : place === "room" ? 0.012 : 0, t, 1);
-    this.street.gain.setTargetAtTime(place === "outside" ? 0.22 : 0.015, t, 0.8);
+    this.street.gain.setTargetAtTime(
+      place === "outside" ? 0.22 : place === "open" ? 0 : 0.015,
+      t,
+      0.8,
+    );
     this.musicLevel.gain.setTargetAtTime(place === "outside" ? 0.1 : 0.34, t, 1.2);
-    this.hum.gain.setTargetAtTime(place === "outside" ? 0 : 0.045, t, 0.8);
+    this.hum.gain.setTargetAtTime(place === "outside" || place === "open" ? 0 : 0.045, t, 0.8);
+  }
+
+  /**
+   * The air of a painting world: wind that comes and goes in gusts, crickets
+   * in the grass on either side, and now and then a bell from far below.
+   * `null` stills it.
+   */
+  air(air: Air | null) {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    if (this.airNow) {
+      const old = this.airNow;
+      this.airNow = null;
+      // No more bells from now; the rest fades, then stops.
+      old.silence();
+      old.out.gain.setTargetAtTime(0, t, 0.5);
+      window.setTimeout(() => old.stop(), 3000);
+    }
+    if (!air) return;
+    const out = gain(ctx, 0, this.master);
+    out.gain.setTargetAtTime(1, t, 1.5);
+    const running: AudioScheduledSourceNode[] = [];
+    const start = <T extends AudioScheduledSourceNode>(node: T) => {
+      node.start();
+      running.push(node);
+      return node;
+    };
+    /** A slow sine that swings a gain or a filter about its own value. */
+    const swing = (to: AudioParam, rate: number, depth: number) => {
+      const lfo = start(ctx.createOscillator());
+      lfo.frequency.value = rate;
+      lfo.connect(gain(ctx, depth)).connect(to);
+    };
+
+    if (air.wind > 0) {
+      // Gusts: two slow swells that drift in and out of step, so no two are alike.
+      const gusts = gain(ctx, 0.55, out);
+      swing(gusts.gain, 0.071, 0.27);
+      swing(gusts.gain, 0.19, 0.16);
+      // The body of the wind, low and wide.
+      const body = start(ctx.createBufferSource());
+      body.buffer = this.brown;
+      body.loop = true;
+      body.playbackRate.value = 1.7;
+      const bodyTone = ctx.createBiquadFilter();
+      bodyTone.type = "bandpass";
+      bodyTone.frequency.value = 360;
+      bodyTone.Q.value = 0.45;
+      swing(bodyTone.frequency, 0.11, 130);
+      body.connect(bodyTone).connect(gain(ctx, 0.19 * air.wind, gusts));
+      // And the hiss of it in the grass and the cypress.
+      const hiss = start(ctx.createBufferSource());
+      hiss.buffer = this.noise;
+      hiss.loop = true;
+      const hissTone = ctx.createBiquadFilter();
+      hissTone.type = "bandpass";
+      hissTone.frequency.value = 3200;
+      hissTone.Q.value = 0.6;
+      swing(hissTone.frequency, 0.13, 900);
+      hiss.connect(hissTone).connect(gain(ctx, 0.012 * air.wind, gusts));
+    }
+
+    if (air.crickets > 0) {
+      // Each cricket: a high note, pulsed fast, trilling for a while and resting for a while.
+      for (const [pitch, pulse, rest, pan] of [
+        [4300, 21, 0.31, -0.7],
+        [4850, 25, 0.23, 0.6],
+        [3950, 18, 0.17, 0.15],
+      ]) {
+        const note = start(ctx.createOscillator());
+        note.frequency.value = pitch;
+        const pulsed = gain(ctx, 0.5);
+        swing(pulsed.gain, pulse, 0.5);
+        // Only the top of a slow swell opens it, so each trill has silence after it.
+        const trill = gain(ctx, 0);
+        const swell = start(ctx.createOscillator());
+        swell.frequency.value = rest;
+        const top = ctx.createWaveShaper();
+        top.curve = new Float32Array([0, 0, 0, 0.5, 1]);
+        swell.connect(top).connect(trill.gain);
+        const p = ctx.createStereoPanner();
+        p.pan.value = pan;
+        note.connect(pulsed).connect(trill).connect(p);
+        p.connect(gain(ctx, 0.012 * air.crickets, out));
+      }
+    }
+
+    let bellTimer = 0;
+    if (air.bell > 0) {
+      const toll = () => {
+        if (!this.muted && !document.hidden) {
+          const strokes = 2 + Math.floor(Math.random() * 3);
+          for (let i = 0; i < strokes; i++)
+            this.bell(out, ctx.currentTime + 0.1 + i * 2.6, air.bell);
+        }
+        bellTimer = window.setTimeout(toll, (95 + Math.random() * 70) * 1000);
+      };
+      bellTimer = window.setTimeout(toll, (22 + Math.random() * 14) * 1000);
+    }
+
+    this.airNow = {
+      out,
+      stop() {
+        for (const node of running) node.stop();
+        out.disconnect();
+      },
+      silence: () => window.clearTimeout(bellTimer),
+    };
+  }
+
+  /** One stroke of a church bell a long way off: its partials, dulled by the distance, in a long echo. */
+  private bell(to: AudioNode, t: number, level: number) {
+    const ctx = this.ctx;
+    const far = ctx.createBiquadFilter();
+    far.type = "lowpass";
+    far.frequency.value = 1100;
+    far.connect(gain(ctx, 0.05 * level, to));
+    far.connect(gain(ctx, 0.05 * level, this.wet));
+    // Hum, prime, the minor third that makes a bell a bell, quint, nominal.
+    for (const [ratio, peak, decay] of [
+      [0.5, 0.5, 5.5],
+      [1, 1, 4],
+      [1.19, 0.55, 2.6],
+      [1.5, 0.3, 1.8],
+      [2, 0.45, 1.4],
+      [2.67, 0.12, 0.8],
+    ]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = 311 * ratio;
+      o.connect(envelope(ctx, t, peak, decay)).connect(far);
+      o.start(t);
+      o.stop(t + decay + 0.2);
+    }
   }
 
   /** A car `dist` metres off, `pan` −1 (left) to 1 (right); quieter indoors. */
@@ -310,10 +454,34 @@ export class MuseumAudio {
     this.focus(this.focused);
   }
 
-  footstep(surface: Surface, strength = 1) {
+  footstep(surface: Surface | "grass", strength = 1) {
     if (this.muted) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.005;
+    if (surface === "grass") {
+      // A foot pressing grass down: a soft brush of it, and the dull give of the earth under.
+      const brush = ctx.createBufferSource();
+      brush.buffer = this.noise;
+      brush.playbackRate.value = 0.7 + Math.random() * 0.4;
+      const tone = ctx.createBiquadFilter();
+      tone.type = "bandpass";
+      tone.frequency.value = 1500 + Math.random() * 900;
+      tone.Q.value = 0.5;
+      const env = ctx.createGain();
+      const peak = 0.16 * strength * (0.75 + Math.random() * 0.5);
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.linearRampToValueAtTime(peak, t + 0.035);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + 0.22 + Math.random() * 0.06);
+      brush.connect(tone).connect(env).connect(this.sfx);
+      brush.start(t, Math.random() * 1.2, 0.35);
+      const thud = ctx.createOscillator();
+      thud.frequency.setValueAtTime(82, t);
+      thud.frequency.exponentialRampToValueAtTime(48, t + 0.09);
+      thud.connect(envelope(ctx, t, 0.16 * strength, 0.09)).connect(this.sfx);
+      thud.start(t);
+      thud.stop(t + 0.16);
+      return;
+    }
     // Decking sounds like boards; the pavement like stone, without the echo.
     const wood = surface === "wood" || surface === "deck";
     const src = ctx.createBufferSource();

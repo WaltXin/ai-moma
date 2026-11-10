@@ -4,15 +4,19 @@ import { worldRandom } from "@/lib/worlds/random";
 import {
   CHURCH,
   CYPRESS,
+  CYPRESS_BUSHES,
   FOLIAGE,
   LAND,
   MOON,
+  OLIVES,
   RIDGES,
   SKY,
   STARS,
   START,
   VILLAGE,
+  WIND,
   blocked,
+  grassAt,
   heightAt,
   insideBounds,
   landFlow,
@@ -25,6 +29,7 @@ import {
   C,
   addBushes,
   addFlameTree,
+  addGrass,
   addGround,
   addRidges,
   addSky,
@@ -34,14 +39,17 @@ import {
   smooth,
   type LandPaint,
   type SceneMaker,
+  type Stage,
 } from "./kit";
 
 /**
  * The Starry Night, raised with the world kit: a painted sky whose strokes
  * keep moving along their swirls, blue hills ridge behind ridge, a village
- * with a few lit windows and the cypress swaying. Nobody else is on the
- * hill: it's yours to stand in, or sit in the grass and look up. Nothing in
- * it reacts to the visitor.
+ * with a few lit windows and the cypress swaying. On the hilltop, grass
+ * stands up out of the paint and bows as the wind crosses it, olives and the
+ * cypress's bushes give the visitor something to walk round, and fireflies
+ * drift over the grass. Nobody else is on the hill: it's yours to stand in,
+ * or sit in the grass and look up. Nothing in it reacts to the visitor.
  */
 
 /** The navy every outline in the village is inked in. */
@@ -165,6 +173,77 @@ function nightLand(): LandPaint {
   };
 }
 
+/**
+ * Fireflies over the grass: a few dabs of the stars' lemon, each drifting
+ * round its own spot on the hill and glowing now and then. They're small and
+ * near, so walking moves them against the village and the sky.
+ */
+function addFireflies(stage: Stage) {
+  const { low, keep, scene, time, renderer } = stage;
+  const n = worldRandom(77);
+  const COUNT = low ? 28 : 64;
+  const at: number[] = [];
+  const seed: number[] = [];
+  for (let tries = 0; at.length < COUNT * 3 && tries < COUNT * 40; tries++) {
+    const x = (n() - 0.5) * 96;
+    const z = -4 + (n() - 0.5) * 64;
+    if (n() > grassAt(x, z)) continue;
+    at.push(x, heightAt(x, z) + 0.35 + n() * n() * 2.2, z);
+    seed.push(n() * 6.283, 0.25 + n() * 0.4, 0.5 + n() * 0.8, n());
+  }
+  const g = keep(new THREE.BufferGeometry());
+  g.setAttribute("position", new THREE.Float32BufferAttribute(at, 3));
+  g.setAttribute("aSeed", new THREE.Float32BufferAttribute(seed, 4));
+  // They wander a few metres from where they're listed; never cull them by that.
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 30, -4), 80);
+  const size = { value: 1 };
+  const mat = keep(
+    new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uSize: size },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        attribute vec4 aSeed;
+        uniform float uTime;
+        uniform float uSize;
+        varying float vGlow;
+        void main() {
+          float t = uTime * aSeed.y + aSeed.x;
+          // Each wanders a slow, lopsided loop round its own spot.
+          vec3 p = position + vec3(
+            sin(t) * 1.6 + sin(t * 0.37 + aSeed.x) * 2.2,
+            sin(t * 1.3 + aSeed.x * 2.0) * 0.35,
+            cos(t * 0.8) * 1.6 + cos(t * 0.29 + aSeed.x) * 2.2);
+          // Lit for a breath, dark for longer, each in its own time.
+          float beat = sin(uTime * aSeed.z + aSeed.x * 3.0);
+          vGlow = smoothstep(0.35, 0.95, beat) * (0.6 + 0.4 * aSeed.w);
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = min(uSize * (0.16 + 0.1 * aSeed.w) / -mv.z, 64.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying float vGlow;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          // A hot dab, and a soft light round it.
+          float a = smoothstep(1.0, 0.0, d);
+          float core = smoothstep(0.32, 0.1, d);
+          vec3 col = mix(vec3(0.82, 0.86, 0.36), vec3(1.0, 0.98, 0.78), core);
+          gl_FragColor = vec4(col * (a * a * 0.55 + core) * vGlow, 1.0);
+          #include <colorspace_fragment>
+        }`,
+    }),
+  );
+  const flies = new THREE.Points(g, mat);
+  scene.add(flies);
+  const buffer = new THREE.Vector2();
+  stage.onFrame(() => {
+    // A point's size is given in pixels: keep it the same size in the world on any screen.
+    size.value = renderer.getDrawingBufferSize(buffer).y;
+  });
+}
+
 export const createStarryNightScene: SceneMaker = async (canvas, { low }) => {
   const stage = createStage(canvas, { low, fog: { color: "#2b4c8f", density: 0.0011 } });
   const { scene, keep, texture, painted, paintColor, outline, worldUV } = stage;
@@ -185,12 +264,13 @@ export const createStarryNightScene: SceneMaker = async (canvas, { low }) => {
   // ── The ground: the hill underfoot, the valley, the land rising far off, all painted ──
   const ground = await addGround(stage, {
     heightAt,
-    full: { x0: -550, x1: 550, z0: -500, z1: 120 },
+    // Far enough behind the hill that its edge stays under the brow, wherever the visitor stands.
+    full: { x0: -550, x1: 550, z0: -500, z1: 270 },
     // The hilltop gets its own, finer canvas: it's where the visitor looks down at their feet.
     near: { x0: -70, x1: 70, z0: -60, z1: 40 },
-    segments: { low: [120, 70], high: [220, 124] },
+    segments: { low: [120, 84], high: [220, 154] },
     land: nightLand(),
-    far: { px: [2048, 4096], count: [16000, 46000], minLen: 3.5, height: 6, seed: 21 },
+    far: { px: [2048, 4096], count: [19000, 55000], minLen: 3.5, height: 6, seed: 21 },
     fine: { px: [1536, 3072], count: [14000, 42000], minLen: 0, height: 4, seed: 22 },
   });
 
@@ -233,6 +313,8 @@ export const createStarryNightScene: SceneMaker = async (canvas, { low }) => {
   const outlines: THREE.BufferGeometry[] = [];
 
   const n = worldRandom(31);
+  // Chimneys draw from their own numbers, so the village stays as it was laid out.
+  const chim = worldRandom(53);
   const prism = (w: number, d: number, rise: number) => {
     // A pitched roof along the house's width, with a little overhang.
     const hw = w / 2 + 0.3;
@@ -327,6 +409,18 @@ export const createStarryNightScene: SceneMaker = async (canvas, { low }) => {
     );
     walls.push(paintColor(place(body, x, y, z, rot), C(wallHex)));
     roofs.push(paintColor(place(roof, x, y, z, rot), C(roofHex)));
+    // Most houses have a chimney, standing through the roof to one side of the ridge.
+    if (chim() < 0.7) {
+      const cw = 0.7 + chim() * 0.3;
+      const stack = new THREE.BoxGeometry(cw, rise + 1.1, cw).toNonIndexed();
+      stack.translate(
+        (chim() - 0.5) * w * 0.6,
+        h + 0.3 + (rise + 1.1) / 2,
+        (chim() - 0.5) * d * 0.3,
+      );
+      outlines.push(place(outline(stack, 1.12), x, y, z, rot));
+      walls.push(paintColor(place(stack, x, y, z, rot), C(wallHex).multiplyScalar(0.8)));
+    }
     for (const win of windows) {
       const pane = new THREE.PlaneGeometry(0.8, 1.0).toNonIndexed();
       const lx = (win.u - 0.5) * w;
@@ -394,24 +488,35 @@ export const createStarryNightScene: SceneMaker = async (canvas, { low }) => {
   );
   [...walls, ...roofs, ...lights].forEach((g) => g.dispose());
   {
-    const pg = keep(new THREE.BufferGeometry());
-    pg.setAttribute("position", new THREE.Float32BufferAttribute(glowAt, 3));
-    scene.add(
-      new THREE.Points(
-        pg,
-        keep(
-          new THREE.PointsMaterial({
-            map: windowGlow,
-            size: 5,
-            sizeAttenuation: true,
-            transparent: true,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
-            fog: false,
-          }),
-        ),
-      ),
-    );
+    // The light spilling from the windows wavers, as lamplight does: three lots, each in its own time.
+    const LOTS = 3;
+    const lamps: THREE.PointsMaterial[] = [];
+    for (let k = 0; k < LOTS; k++) {
+      const lot: number[] = [];
+      for (let i = k * 3; i < glowAt.length; i += LOTS * 3) lot.push(...glowAt.slice(i, i + 3));
+      if (!lot.length) continue;
+      const pg = keep(new THREE.BufferGeometry());
+      pg.setAttribute("position", new THREE.Float32BufferAttribute(lot, 3));
+      const lamp = keep(
+        new THREE.PointsMaterial({
+          map: windowGlow,
+          size: 6,
+          sizeAttenuation: true,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      lamps.push(lamp);
+      scene.add(new THREE.Points(pg, lamp));
+    }
+    stage.onFrame(() => {
+      const t = stage.time.value;
+      for (const [k, lamp] of lamps.entries())
+        lamp.opacity =
+          0.8 + 0.14 * Math.sin(t * (1.1 + k * 0.45) + k * 2) + 0.06 * Math.sin(t * (5.3 + k));
+    });
   }
 
   // Dark trees round the village and along the valley: each a few lumps of flickering strokes.
@@ -425,7 +530,74 @@ export const createStarryNightScene: SceneMaker = async (canvas, { low }) => {
     edgeChance: 0.35,
     ink: INK,
     glow: 0.3,
+    // Seen from the hill, a stroke has to be metres long to read as one.
+    strokes: {
+      perSquareMetre: [0.1, 0.24],
+      len: [2.4, 4.4],
+      width: [0.9, 1.6],
+      under: ["#0c1f24", "#10262a", "#0e2220"],
+    },
   });
+
+  // ── The hilltop: the bushes the cypress rises from, and olives to walk round ──
+  await addBushes(stage, {
+    bushes: CYPRESS_BUSHES,
+    heightAt,
+    rand: worldRandom(34),
+    dark: FOLIAGE.dark,
+    edge: FOLIAGE.edge,
+    litSide: 1,
+    edgeChance: 0.4,
+    ink: INK,
+    glow: 0.35,
+    strokes: {
+      perSquareMetre: [2, 4.2],
+      len: [0.6, 1.2],
+      width: [0.26, 0.46],
+      under: ["#0c1f24", "#10262a", "#0e2220"],
+    },
+  });
+  // Olives at night: grey-green, silvered on the side the moon is on.
+  await addBushes(stage, {
+    bushes: OLIVES,
+    heightAt,
+    rand: worldRandom(35),
+    dark: ["#1f4038", "#27504a", "#2a4a3a", "#1d3f4a", "#31584a"],
+    edge: ["#6f9a86", "#8fb0a8", "#7a9a6a", "#a8c0b0", "#5f8a8a"],
+    litSide: 1,
+    edgeChance: 0.6,
+    ink: INK,
+    glow: 0.38,
+    stems: ["#1c2a33", "#27323a", "#2f3630", "#182430"],
+    strokes: {
+      perSquareMetre: [1.8, 3.8],
+      len: [0.7, 1.4],
+      width: [0.3, 0.52],
+      under: ["#10262a", "#142c2a", "#0e2220"],
+    },
+  });
+
+  // ── The grass: strokes standing up out of the hill's paint, bowing in the wind ──
+  await addGrass(stage, {
+    area: { x0: -62, x1: 62, z0: -46, z1: 38 },
+    heightAt,
+    densityAt: grassAt,
+    perSquareMetre: [1.4, 3.6],
+    blades: [3, 5],
+    length: [0.22, 0.52],
+    width: [0.035, 0.07],
+    // Strokes grow with distance from where the visitor comes in, as the ground's do.
+    scaleAt: (x, z) => 1 + Math.max(0, Math.hypot(x - START.x, z - START.z) - 14) * 0.035,
+    colors: LAND.hill,
+    tips: ["#9aab58", "#a8944a", "#7fb08a", "#b8c078", "#8fb0a0"],
+    tipChance: 0.3,
+    wind: WIND,
+    push: 0.34,
+    glow: 0.38,
+    seed: 88,
+  });
+
+  addFireflies(stage);
 
   // ── The cypress: tongues of dark flame twisting up round one another ──
   await addFlameTree(stage, {

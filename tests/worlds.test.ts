@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SCENES } from "@/components/worlds/scenes";
 import { getWorlds } from "@/lib/museum/registry";
+import { arrivalOf } from "@/lib/worlds/place";
 import { PLACES } from "@/lib/worlds/places";
 import * as SUN from "@/lib/worlds/sunflowers";
 import * as WHEAT from "@/lib/worlds/wheat-field";
@@ -9,12 +10,16 @@ import { WORLD_REQUEST_TEMPLATE, worldRequestUrl } from "@/lib/worlds/request";
 import {
   BOUNDS,
   CYPRESS,
+  CYPRESS_BUSHES,
   MOON,
+  OLIVES,
   START,
   STARS,
   VILLAGE,
+  WIND,
   blocked,
   clampToBounds,
+  grassAt,
   heightAt,
   insideBounds,
   landFlow,
@@ -41,6 +46,20 @@ describe("painting worlds", () => {
     }
   });
 
+  it("brings every visitor in from somewhere they may stand, with a clear walk to their place", () => {
+    for (const [slug, p] of Object.entries(PLACES)) {
+      const a = arrivalOf(p);
+      expect(p.clampToBounds(a.x, a.z), slug).toEqual(a);
+      // A few steps at most, and nothing in the way.
+      expect(Math.hypot(a.x - p.start.x, a.z - p.start.z), slug).toBeLessThan(5);
+      for (let i = 0; i <= 20; i++) {
+        const x = a.x + ((p.start.x - a.x) * i) / 20;
+        const z = a.z + ((p.start.z - a.z) * i) / 20;
+        expect(p.blocked(x, z), `${slug} step ${i}`).toBe(false);
+      }
+    }
+  });
+
   it("asks for a new world on a GitHub form that exists, filled in", () => {
     expect(existsSync(`.github/ISSUE_TEMPLATE/${WORLD_REQUEST_TEMPLATE}`)).toBe(true);
     const url = new URL(
@@ -57,6 +76,47 @@ describe("the Starry Night hill", () => {
   it("starts the visitor on the hilltop, clear of the cypress", () => {
     expect(insideBounds(START.x, START.z)).toBe(true);
     expect(blocked(START.x, START.z)).toBe(false);
+  });
+
+  it("walks the visitor in over the hilltop, from behind where they'll stand", () => {
+    const a = arrivalOf(PLACES["starry-night"]);
+    expect(a.z).toBeGreaterThan(START.z + 3);
+    expect(insideBounds(a.x, a.z)).toBe(true);
+  });
+
+  it("stands olives and the cypress's bushes on the hilltop, clear of the view of the village", () => {
+    for (const t of [...OLIVES, ...CYPRESS_BUSHES]) {
+      expect(heightAt(t.x, t.z), `tree at ${t.x}, ${t.z}`).toBeGreaterThan(20);
+      // In the way of a walker, and nowhere near where they come in.
+      expect(blocked(t.x, t.z)).toBe(true);
+      expect(Math.hypot(t.x - START.x, t.z - START.z)).toBeGreaterThan(8);
+    }
+    // An olive's leaves are overhead: only its stem is in the way.
+    for (const t of OLIVES) {
+      expect(t.trunk).toBeGreaterThan(1);
+      expect(blocked(t.x + t.r * 0.8, t.z)).toBe(false);
+      // Behind the visitor or well out to the side, never between them and the village.
+      expect(t.z > START.z || Math.abs(t.x - START.x) > 20, `olive at ${t.x}`).toBe(true);
+    }
+    // The bushes are at the cypress's foot.
+    for (const t of CYPRESS_BUSHES)
+      expect(Math.hypot(t.x - CYPRESS.x, t.z - CYPRESS.z)).toBeLessThan(5);
+  });
+
+  it("grows grass over the hilltop and nowhere else, with the wind in it", () => {
+    for (let x = -80; x <= 80; x += 3.7) {
+      for (let z = -60; z <= 50; z += 3.1) {
+        const g = grassAt(x, z);
+        expect(g).toBeGreaterThanOrEqual(0);
+        expect(g).toBeLessThanOrEqual(1);
+      }
+    }
+    expect(grassAt(START.x, START.z)).toBeGreaterThan(0.2);
+    // None under a tree, none down in the village.
+    for (const t of [...OLIVES, ...CYPRESS_BUSHES]) expect(grassAt(t.x, t.z)).toBe(0);
+    expect(grassAt(CYPRESS.x, CYPRESS.z)).toBe(0);
+    for (const h of VILLAGE.houses) expect(grassAt(h.x, h.z)).toBe(0);
+    expect(Math.hypot(...WIND)).toBeCloseTo(1, 2);
   });
 
   it("keeps walkers on the hill", () => {

@@ -251,10 +251,11 @@ it; only The Starry Night does.
 
 ```
 src/content/worlds.ts                 PaintingWorld: title, artist, year, where the real one hangs, its room here
-src/lib/worlds/<slug>.ts              the layout as data, and its WorldPlace: start, ground, bounds, music
+src/lib/worlds/<slug>.ts              the layout as data, and its WorldPlace: start, ground, bounds, music, air
+src/lib/worlds/place.ts               WorldPlace, and where a visitor walks in from (`arrivalOf`)
 src/lib/worlds/places.ts              every world's place, by slug
 src/components/worlds/brush.ts        painters: a sky panorama, any surface, brushwork tiles, relief → normal maps
-src/components/worlds/kit.ts          the world kit: stage, painted sky, ground, ridges, flame trees, bushes
+src/components/worlds/kit.ts          the world kit: stage, painted sky, ground, grass, ridges, flame trees, bushes
 src/components/worlds/<slug>-scene.ts a world's scene: the kit's pieces, plus what only it has
 src/components/worlds/scenes.ts       every world's scene, by slug, loaded on demand
 src/components/worlds/world-view.tsx  walking, sitting, sound and controls, the same for every world
@@ -275,12 +276,20 @@ bristles left. Lit, the paint stands up off the canvas like impasto.
   following a world's own flow (for the Starry Night hill, its contours: `landFlow`) in a
   `LandPaint` of its colours. A finer canvas covers where the visitor walks, and a fine tile
   of bristle marks fades in near them, so the paint still looks like paint at their feet.
+- **Grass** (`addGrass`): tufts of curved, raised blades standing up out of the ground's
+  paint wherever a world's own `densityAt` lets them, each blade one colour, bigger and fewer
+  far off. They lean downwind and bow as gusts cross the hill (in the vertex shader). Near
+  blades sliding past far ones is most of what tells the eye it's walking through a place.
 - **Ridges** (`addRidges`): hills ridge behind ridge, each painted along its own line,
   lighter at the rim, in shadow lower down, with a dark line on top.
 - **Flame trees** (`addFlameTree`): a cypress as tongues of flame twisting up round one
   another, covered in a few thousand curved, raised strokes, swaying.
 - **Bushes** (`addBushes`): bumpy lumps drawn up into a point, painted, outlined in ink, and
-  (with `strokes`) covered in raised strokes flicking upward.
+  (with `strokes`) covered in raised strokes flicking upward. With `trunk`, a bush is a tree:
+  its leaves held up on a leaning stem, so the land shows under them.
+
+Each builder gives the page a breath (`breathe`) before it starts and every so often as it
+works, so no piece of a world holds the main thread for long.
 
 Custom shaders go through `customize`, which gives each its own program cache key: three.js
 otherwise shares one program between materials changed by the same helper, so a second tree
@@ -291,7 +300,12 @@ Painters lay a few thousand strokes at a time and then let the page breathe (`br
 the welcome stays responsive while a world is painted.
 
 The first world is _The Starry Night_ (`starry-night`): a hill above a sleeping village, its
-cypress, and the night sky with eleven stars and the moon. The second, _Wheat Field with
+cypress, and the night sky with eleven stars and the moon. The hilltop is somewhere to walk:
+grass (`grassAt`) bowing in the wind, the dark bushes the cypress rises from, five olives
+behind the visitor and out to the sides (their stems are in a walker's way, their leaves
+overhead), and fireflies drifting over the grass. Down in the village the trees are covered
+in raised strokes metres long, the houses have chimneys, and the light at the windows
+wavers. The second, _Wheat Field with
 Cypresses_ (`wheat-field-with-cypresses`), is built on the same kit: a summer sky of cream
 clouds (`cloudAt`, painted with bigger strokes, as much behind the visitor as in front), the
 Alpilles as ridges, two flame trees, an olive and green bushes covered in raised strokes
@@ -335,6 +349,21 @@ the table. Colours given as 0–255 sRGB go through `setRGB(…, SRGBColorSpace)
 interpretation drawn with code, and the welcome says where the real painting hangs. Only
 public-domain paintings get a world. A room links to its worlds (`getWorldsForRoom`), and
 `validateMuseum()` checks that each world's movement and room exist.
+
+**Walking like a person** (`world-view.tsx`, the same in every world). A visitor comes in a
+few steps behind where they'll stand (`arrivalOf`) and walks the rest, so they arrive on foot;
+any key or tap takes over. They gather speed and lose it instead of starting and stopping
+dead, slow over the last steps to where they tapped, and with each step the head rises and
+falls, leans toward the standing foot and tips a little; the view follows the hand a moment
+behind, and they breathe when still. Each footfall is heard where the place says what's
+underfoot (`footing`). With `prefers-reduced-motion` the view holds steady and they start
+where they'll stand.
+
+**The air.** A place can say what its air sounds like (`air`: wind, crickets, a bell): wind
+in gusts, crickets trilling and resting on either side, and now and then a few strokes of a
+bell from far off (`MuseumAudio.air`, made live like the rest of the sound). A world with air
+is out in the open (`setPlace("open")`): no building's hum, no murmur of other visitors. A
+`vignette` colour darkens the corners of the view.
 
 **Quiet controls.** Sitting, or in full screen, the title and buttons fade after a few seconds
 (2.5 s in full screen, 4 s sitting), and the cursor hides. Moving the mouse, tapping or pressing
