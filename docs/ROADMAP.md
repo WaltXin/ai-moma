@@ -41,6 +41,8 @@ Rough order. Each item is a good first PR area.
 - [x] One real building: enter from the street, lobby with grand stair, a skylit atrium with stairs across it and a glass lift, enfiladed galleries, a sculpture terrace with a living wall, other visitors
 - [x] Up close: a painting grows off the wall into a full-screen viewer you can zoom into, brushstroke by brushstroke
 - [x] Baked light: laylights, downlights, windows and the atrium's skylight traced round every floor, with two bounces
+- [x] Plasterwork: painted plaster walls, cornices and skirtings throughout; pilasters, arched
+      panels and cased doorways in the lobby and the atrium; room names over their doorways
 - [x] Step into a painting: _The Starry Night_ as a hill you walk and sit on, under a sky that keeps moving
 - [x] Thick paint: the Starry Night sky's strokes stand up off the canvas, lit from the moon's side
 - [x] Thick paint on the land too: hills, village, trees and cypress built from the same raised

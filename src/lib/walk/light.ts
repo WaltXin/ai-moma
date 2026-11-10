@@ -403,10 +403,14 @@ export function bakeLevel(
       cols: f.cols,
       rows: f.rows,
       ref: REFERENCE.wall,
+      wall: true,
     })),
-    { base: floorBase, cols: P.cols, rows: P.rows, ref: REFERENCE.floor },
-    { base: ceilBase, cols: P.cols, rows: P.rows, ref: REFERENCE.ceiling },
+    { base: floorBase, cols: P.cols, rows: P.rows, ref: REFERENCE.floor, wall: false },
+    { base: ceilBase, cols: P.cols, rows: P.rows, ref: REFERENCE.ceiling, wall: false },
   ];
+  // Texels for a distance on the walls. A wall's light changes slowly along it and faster up it
+  // (dark at the skirting, bright at eye height), so it's smoothed more along than up.
+  const wallTexels = (m: number) => Math.max(1, Math.round(m * q.wall));
   let light = new Float32Array(n * 3);
   let prev: Float32Array | null = null;
   q.rays.forEach((rays, pass) => {
@@ -510,6 +514,14 @@ export function bakeLevel(
     // Smooth the noise, then add the downlights (exact already) and fill the gaps.
     const next = new Float32Array(n * 3);
     for (const bk of blocks) {
+      if (bk.wall) {
+        // Plaster shows every blotch, and the contrast curve doubles it: smooth it until it's even.
+        for (let i = 0; i < 2; i++) {
+          blurAxes(emit, valid, bk.base, bk.cols, bk.rows, wallTexels(1.2), wallTexels(0.4));
+          blurAxes(bounce, valid, bk.base, bk.cols, bk.rows, wallTexels(2), wallTexels(0.6));
+        }
+        continue;
+      }
       blur(emit, valid, bk.base, bk.cols, bk.rows, 2);
       blur(bounce, valid, bk.base, bk.cols, bk.rows, 2);
       blur(bounce, valid, bk.base, bk.cols, bk.rows, 2);
@@ -627,6 +639,54 @@ function blur(
       light[(base + k) * 3 + 2] = b / c;
     }
   }
+}
+
+/**
+ * A box blur `rx` texels along and `ry` texels up one block, over its valid
+ * texels only, in place: one pass along each axis, with running sums so a
+ * wide blur costs no more than a narrow one.
+ */
+function blurAxes(
+  light: Float32Array,
+  valid: Uint8Array,
+  base: number,
+  cols: number,
+  rows: number,
+  rx: number,
+  ry: number,
+) {
+  const longest = Math.max(cols, rows) + 1;
+  const sr = new Float64Array(longest);
+  const sg = new Float64Array(longest);
+  const sb = new Float64Array(longest);
+  const sc = new Int32Array(longest);
+  const pass = (along: boolean, radius: number) => {
+    const [lines, len] = along ? [rows, cols] : [cols, rows];
+    for (let a = 0; a < lines; a++) {
+      const at = (t: number) => base + (along ? a * cols + t : t * cols + a);
+      // Prefix sums of the line's valid texels.
+      for (let t = 0; t < len; t++) {
+        const k = at(t);
+        const ok = valid[k] ? 1 : 0;
+        sr[t + 1] = sr[t] + ok * light[k * 3];
+        sg[t + 1] = sg[t] + ok * light[k * 3 + 1];
+        sb[t + 1] = sb[t] + ok * light[k * 3 + 2];
+        sc[t + 1] = sc[t] + ok;
+      }
+      for (let t = 0; t < len; t++) {
+        const k = at(t);
+        if (!valid[k]) continue;
+        const lo = Math.max(0, t - radius);
+        const hi = Math.min(len, t + radius + 1);
+        const c = sc[hi] - sc[lo];
+        light[k * 3] = (sr[hi] - sr[lo]) / c;
+        light[k * 3 + 1] = (sg[hi] - sg[lo]) / c;
+        light[k * 3 + 2] = (sb[hi] - sb[lo]) / c;
+      }
+    }
+  };
+  pass(true, rx);
+  pass(false, ry);
 }
 
 /**

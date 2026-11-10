@@ -3,6 +3,7 @@ import { floorWall } from "@/components/gallery/walls";
 import { seedFrom, seededRandom } from "@/lib/museum/placeholder";
 import { type Building, type Item, type Level, type PlanArtwork, type Vec, spaceAt } from "@/lib/walk/building";
 import { DESK, type Focus, forward, lenticularView } from "@/lib/walk/motion";
+import { roomSign } from "@/lib/walk/trim";
 import { Batch, type Kit, Quads, boxGeometry } from "./kit";
 import {
   type Fonts,
@@ -249,7 +250,7 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
           { text: "A museum of modern art, made of modern art", size: 54, weight: 500 },
         ],
         "#1b1b1b",
-        11,
+        L.w,
         { x: L.x, y: 3.4, z: L.z + 0.01 },
         0,
       );
@@ -261,7 +262,7 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
           { text: level.tagline, size: 52, weight: 400 },
         ],
         "#1b1b1b",
-        10,
+        L.w,
         { x: L.x, y: level.y + 2.7, z: L.z + 0.01 },
         0,
         2.6,
@@ -269,23 +270,30 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
     }
 
     // Each room's name over its doorway, read from outside.
+    const sign = roomSign(level);
     for (const room of b.rooms.filter((r) => r.level === level.index)) {
       const out = { x: -room.inward.x, z: -room.inward.z };
-      const faceOffset = 0.16;
+      // The door's point is on the room's side of its wall; the name goes on the far side.
+      const wall = level.walls.find((w) =>
+        w.z0 === w.z1
+          ? Math.abs(w.z0 - room.door.z) < 0.5 && room.door.x > w.x0 && room.door.x < w.x1
+          : Math.abs(w.x0 - room.door.x) < 0.5 && room.door.z > w.z0 && room.door.z < w.z1,
+      );
+      const faceOffset = (wall?.thick ?? 0.3) + 0.005;
       lettering(
         [
           { text: room.movement.name, size: 110, weight: 800, font: "display" },
           { text: room.title, size: 50, weight: 500 },
         ],
-        level.index === 0 ? "#1b1b1b" : "#1b1b1b",
-        3.8,
+        "#1b1b1b",
+        sign.w,
         {
           x: room.door.x + room.inward.x * -faceOffset + out.x * 0.01,
-          y: level.y + 3.9,
+          y: level.y + sign.y,
           z: room.door.z + room.inward.z * -faceOffset + out.z * 0.01,
         },
         yawFacing(out),
-        0.9,
+        sign.h,
       );
     }
     // The public rooms off the lobby, named over their openings.

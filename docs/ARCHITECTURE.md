@@ -41,6 +41,8 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
               architecture.ts   walls with reveals, floors with baked soft shadows, laylights,
                                 slab edges and glass balustrades, stairs, the glass lift,
                                 the rippled façade, the oculus
+              mouldings.ts      cornices, skirtings, casings, pilasters and arched panels,
+                                placed by src/lib/walk/trim.ts   (pure, tested)
               bake.worker.ts    the light round every floor, traced off the main thread
                                   src/lib/walk/light.ts   (pure, tested)
               furnishing.ts     paintings under their spots, labels, lecterns, furniture,
@@ -83,7 +85,16 @@ content ──▶ buildBuilding()            src/lib/walk/building.ts     (serve
   colour (and dims the floor's reflections by it) instead of adding light, so the scene's own
   lights still balance floors against walls, and furniture, paintings and visitors keep them.
   It fades in over the old vertex shading as it arrives. Phones bake coarser, with one bounce.
+  Walls are smoothed more along than up (blotches show on plaster; the darkening at the floor
+  is real), and `tests/light.test.ts` checks a plain wall stays even.
   In development, `window.__light.force(0 | 1)` switches it off and on to compare.
+- **Plasterwork.** Walls are painted plaster: a faint tint and roller texture tiled every 2 m
+  (`plaster()` in `textures.ts`). `lib/walk/trim.ts` plans the mouldings on every face: the
+  galleries get a quiet cove and skirting, so the art leads; the lobby and the atrium get an
+  old stair hall's: a deep cornice, cased doorways, and pilasters with blind arches between
+  them, clear of doorways, room names, the floor's name and the grand stair (checked in
+  `tests/walk.test.ts`). `mouldings.ts` sweeps each profile along its path, mitred at the
+  corners, and takes its light from the wall's own bake.
 - **Controls.** Drag to look; WASD / arrows; click the floor (any floor) to walk there; click a
   painting to walk up to it; E opens what you're facing; F opens the floor directory; scroll,
   pinch or V steps the camera back to show your avatar.

@@ -22,6 +22,7 @@ import {
   pavement,
   skyline,
   stoneFloor,
+  plaster,
   sunThroughGlass,
   woodFloor,
 } from "./textures";
@@ -148,16 +149,30 @@ export function createMuseumScene(
     if (!t) textures.set(key, (t = tex(make(), opts)));
     return t;
   };
+  // One plaster finish for every wall, in 2 m tiles (wall texture coordinates are in metres).
+  let plasterPair: { map: THREE.Texture; bump: THREE.Texture } | null = null;
+  const plasterMaps = () => {
+    if (!plasterPair) {
+      const made = plaster(low ? 512 : 1024);
+      plasterPair = { map: tex(made.map, { repeat: true, color: false }), bump: tex(made.bump, { repeat: true, color: false }) };
+      plasterPair.map.repeat.set(0.5, 0.5);
+      plasterPair.bump.repeat.set(0.5, 0.5);
+    }
+    return plasterPair;
+  };
   const std = (p: THREE.MeshStandardMaterialParameters) => keep(new THREE.MeshStandardMaterial(p));
   const basic = (p: THREE.MeshBasicMaterialParameters) => keep(new THREE.MeshBasicMaterial(p));
   const outdoor = (hex: string) => new THREE.Color().set(hex).multiplyScalar(daylight);
   const make = (key: string): THREE.Material => {
     const [kind, arg] = key.split(/:(.*)/);
     switch (kind) {
-      case "plaster":
-        return std({ color: arg, roughness: 0.93, metalness: 0, vertexColors: true });
+      case "plaster": {
+        const { map, bump } = plasterMaps();
+        return std({ color: arg, map, bumpMap: bump, bumpScale: 0.35, roughness: 0.93, metalness: 0, vertexColors: true });
+      }
       case "skirting":
-        return std({ color: mix(arg, arg === "#f3f1ec" ? "#bdb8ae" : "#000000", 0.3), roughness: 0.6, vertexColors: true });
+        // Gloss paint on wood: smoother, and catching a little more light.
+        return std({ color: mix(arg, arg === "#f3f1ec" ? "#bdb8ae" : "#000000", 0.3), roughness: 0.45, vertexColors: true });
       case "ceiling":
         return std({ color: "#f2f0eb", roughness: 1, emissive: "#f2f0eb", emissiveIntensity: 0.5, vertexColors: true });
       case "slab":

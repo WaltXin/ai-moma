@@ -16,6 +16,7 @@ import {
   startPose,
   viewpoint,
 } from "@/lib/walk/motion";
+import { TRIM, corniceHeight, roomSign, wallTrim } from "@/lib/walk/trim";
 
 const building: Building = buildBuilding({
   floors: getFloors(),
@@ -250,5 +251,87 @@ describe("lenticular works", () => {
     }
     // Code-drawn pieces are SVG: their own file is sharp at any size.
     for (const a of building.artworks.filter((x) => x.generative && !x.frames)) expect(a.zoom?.src, a.id).toBe(a.image!.src);
+  });
+});
+
+describe("the plasterwork", () => {
+  const faces = building.levels.map((level) => ({ level, trim: wallTrim(building, level) }));
+  const overlaps = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 && b0 < a1;
+
+  it("gives the lobby and every atrium floor pilasters and arches, the galleries a plain finish", () => {
+    for (const { level, trim } of faces) {
+      const grand = trim.filter((f) => f.style === "grand");
+      expect(grand.flatMap((f) => f.pilasters).length, `level ${level.index}`).toBeGreaterThanOrEqual(4);
+      expect(grand.flatMap((f) => f.panels).filter((p) => p.arch).length, `level ${level.index}`).toBeGreaterThanOrEqual(2);
+      for (const f of trim) {
+        const w = level.walls[f.wall];
+        const mid = (f.along === "x" ? (w.x0 + w.x1) / 2 : (w.z0 + w.z1) / 2);
+        const p = f.along === "x" ? { x: mid, z: f.line + f.n.z * 0.3 } : { x: f.line + f.n.x * 0.3, z: mid };
+        if (spaceAt(level, p)?.kind === "gallery") expect(f.style, `level ${level.index} wall ${f.wall}`).toBe("plain");
+      }
+    }
+  });
+
+  it("keeps pilasters and panels on the wall, clear of doorways, signs, the floor's name and the stair", () => {
+    for (const { level, trim } of faces) {
+      const sign = roomSign(level);
+      for (const f of trim) {
+        const w = level.walls[f.wall];
+        const start = f.along === "x" ? w.x0 : w.z0;
+        const end = f.along === "x" ? w.x1 : w.z1;
+        const spans: [number, number][] = [
+          ...f.pilasters.map((p) => [p - 0.32, p + 0.32] as [number, number]),
+          ...f.panels.map((p) => [p.a, p.b] as [number, number]),
+        ];
+        const where = `level ${level.index} wall ${f.wall}`;
+        for (const [a, b] of spans) {
+          expect(a, where).toBeGreaterThan(start);
+          expect(b, where).toBeLessThan(end);
+          // Every opening, with its casing.
+          const c = TRIM[f.style].casing;
+          for (const o of w.openings) {
+            expect(overlaps(a, b, start + o.from - c, start + o.to + c), `${where}: opening`).toBe(false);
+          }
+          for (const r of building.rooms.filter((r) => r.level === level.index)) {
+            const across = f.along === "x" ? r.door.z - r.inward.z * w.thick : r.door.x - r.inward.x * w.thick;
+            if (Math.abs(across - f.line) > 0.05) continue;
+            const s = f.along === "x" ? r.door.x : r.door.z;
+            expect(overlaps(a, b, s - sign.w / 2, s + sign.w / 2), `${where}: ${r.slug}'s name`).toBe(false);
+          }
+          const L = level.lettering;
+          if (f.along === "x" && Math.abs(f.line - L.z) < 0.05) {
+            expect(overlaps(a, b, L.x - L.w / 2, L.x + L.w / 2), `${where}: the floor's name`).toBe(false);
+          }
+          for (const st of building.stairs.filter((st) => st.from === level.index && st.kind === "grand")) {
+            if (f.along === "z" && Math.abs(f.line - st.rect.x0) < 0.3) {
+              expect(overlaps(a, b, st.rect.z0, st.rect.z1), `${where}: the grand stair`).toBe(false);
+            }
+          }
+        }
+        for (const p of f.panels) {
+          expect(p.y0, where).toBeGreaterThan(f.skirting);
+          expect(p.y1, where).toBeLessThan(f.height - f.cornice);
+        }
+      }
+    }
+  });
+
+  it("fits every room's name between its doorway's casing and the cornice", () => {
+    for (const room of building.rooms) {
+      const level = building.levels[room.level];
+      const sign = roomSign(level);
+      const wall = level.walls.find((w) =>
+        w.z0 === w.z1
+          ? Math.abs(w.z0 - room.door.z) < 0.5 && room.door.x > w.x0 && room.door.x < w.x1
+          : Math.abs(w.x0 - room.door.x) < 0.5 && room.door.z > w.z0 && room.door.z < w.z1,
+      )!;
+      const s = wall.z0 === wall.z1 ? room.door.x - wall.x0 : room.door.z - wall.z0;
+      const door = wall.openings.find((o) => o.from < s && o.to > s);
+      if (!door) continue; // A room off the enfilade is named from the room before it.
+      const bottom = sign.y - sign.h / 2;
+      const top = sign.y + sign.h / 2;
+      expect(bottom, room.slug).toBeGreaterThan(door.top + TRIM.grand.casing);
+      expect(top, room.slug).toBeLessThan(level.ceiling - corniceHeight(level, "grand"));
+    }
   });
 });

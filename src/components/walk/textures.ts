@@ -112,6 +112,77 @@ export function stoneFloor(): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * Adds `weight` × smooth noise that tiles into `out` (size × size): `cells`
+ * random values across the tile each way, eased between. Cell lookups are
+ * worked out once per row and column, so the inner loop is a few reads.
+ */
+function addTilingNoise(out: Float32Array, size: number, cells: number, seed: number, weight: number) {
+  const rand = seededRandom(seed);
+  const grid = new Float32Array(cells * cells);
+  for (let i = 0; i < grid.length; i++) grid[i] = (rand() + rand()) / 2;
+  const c0 = new Int32Array(size);
+  const c1 = new Int32Array(size);
+  const t = new Float32Array(size);
+  for (let i = 0; i < size; i++) {
+    const x = (i / size) * cells;
+    const x0 = Math.floor(x);
+    const f = x - x0;
+    c0[i] = x0 % cells;
+    c1[i] = (x0 + 1) % cells;
+    t[i] = f * f * (3 - 2 * f);
+  }
+  for (let j = 0; j < size; j++) {
+    const r0 = c0[j] * cells;
+    const r1 = c1[j] * cells;
+    const ty = t[j];
+    const row = j * size;
+    for (let i = 0; i < size; i++) {
+      const tx = t[i];
+      const a = grid[r0 + c0[i]] + (grid[r0 + c1[i]] - grid[r0 + c0[i]]) * tx;
+      const b = grid[r1 + c0[i]] + (grid[r1 + c1[i]] - grid[r1 + c0[i]]) * tx;
+      out[row + i] += weight * (a + (b - a) * ty);
+    }
+  }
+}
+
+/**
+ * Painted plaster, 2 m per tile. `map` is a near-white tint (linear, to be
+ * multiplied into the wall's paint): the faint clouding of a hand-finished
+ * wall under emulsion. `bump` is its relief: the orange peel a roller
+ * leaves, and the gentle waves of the plaster under it.
+ */
+export function plaster(size: number): { map: HTMLCanvasElement; bump: HTMLCanvasElement } {
+  const [map, mctx] = canvas(size, size);
+  const [bump, bctx] = canvas(size, size);
+  const n = size * size;
+  const cloud = new Float32Array(n);
+  addTilingNoise(cloud, size, 3, 21, 0.5);
+  addTilingNoise(cloud, size, 7, 22, 0.3);
+  addTilingNoise(cloud, size, 16, 23, 0.2);
+  const fine = new Float32Array(n);
+  addTilingNoise(fine, size, Math.round(size / 6), 24, 0.6);
+  addTilingNoise(fine, size, Math.round(size / 3), 25, 0.4);
+  const waves = new Float32Array(n);
+  addTilingNoise(waves, size, 10, 26, 1);
+  const rand = seededRandom(27);
+  const m = mctx.createImageData(size, size);
+  const h = bctx.createImageData(size, size);
+  for (let k = 0; k < n; k++) {
+    // Within 4% of white: enough to break up a flat colour, never enough to look dirty.
+    const tint = 1 - 0.03 * cloud[k] - 0.012 * fine[k] - 0.004 * rand();
+    const o = k * 4;
+    m.data[o] = m.data[o + 1] = m.data[o + 2] = Math.round(tint * 255);
+    m.data[o + 3] = 255;
+    const relief = 0.7 * fine[k] + 0.3 * waves[k];
+    h.data[o] = h.data[o + 1] = h.data[o + 2] = Math.round(relief * 255);
+    h.data[o + 3] = 255;
+  }
+  mctx.putImageData(m, 0, 0);
+  bctx.putImageData(h, 0, 0);
+  return { map, bump };
+}
+
 /** Pale concrete pavers for the sidewalk, 4 m per tile. */
 export function pavement(): HTMLCanvasElement {
   const [c, ctx] = canvas(512, 512);
