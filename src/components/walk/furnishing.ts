@@ -340,12 +340,13 @@ export function buildFurnishing(k: Kit, b: Building, fonts: Fonts): Furnishing {
       shelf.add(stand);
     }
 
-    // ── Kiosks to the Studio, the lab, the guides ──
+    // ── Kiosks to the Studio, the lab, the stations, the guides ──
     for (const portal of b.portals.filter((p) => p.level === level.index)) {
       const [c, ctx] = canvas(512, 360);
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, 512, 360);
-      ctx.fillStyle = portal.kind === "studio" ? "#ff2e63" : portal.kind === "lab" ? "#7cf0ff" : "#f6c500";
+      ctx.fillStyle =
+        portal.kind === "studio" ? "#ff2e63" : portal.kind === "lab" ? "#7cf0ff" : portal.kind === "station" ? "#f08a1d" : "#f6c500";
       ctx.fillRect(0, 0, 512, 16);
       ctx.fillStyle = "#f4f0e8";
       ctx.textBaseline = "top";

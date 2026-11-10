@@ -6,6 +6,7 @@ Thanks for helping build the museum! Ways to contribute, easiest first:
 2. **Curate an exhibition** on a floor
 3. **Implement an image provider** adapter
 4. **Build a viewer** (Agamograph, 3D room, …)
+5. **Build a hands-on station** for a movement: see "Paint with dots" (`src/components/stations/`)
 
 ## Setup
 

@@ -138,7 +138,7 @@ export type Item = {
   variant?: number;
 };
 
-/** Something on a floor that leads elsewhere on the site: the Studio, a lab, the learning guides. */
+/** Something on a floor that leads elsewhere on the site: the Studio, a lab, a hands-on station, the learning guides. */
 export type Portal = {
   id: string;
   level: number;
@@ -148,7 +148,7 @@ export type Portal = {
   /** The kiosk or sign, and the yaw a visitor faces to read it. */
   at: Vec;
   yaw: number;
-  kind: "studio" | "lab" | "learn";
+  kind: "studio" | "lab" | "station" | "learn";
 };
 
 export type PlanArtwork = {
@@ -197,6 +197,8 @@ export type PlanRoom = {
     palette: string[];
     pattern: PlaceholderPattern;
     studioOpen: boolean;
+    /** The movement's hands-on station, if it has one. */
+    station?: string;
   };
   level: number;
   /** Inside faces of the walls. */
@@ -329,6 +331,8 @@ export function buildBuilding(input: {
   movements: Movement[];
   /** Floors that also have a hands-on lab (`/floors/[slug]/walk`). */
   labs?: string[];
+  /** Movements with a hands-on station (`/studio/[movement]`), with what its kiosk says. */
+  stations?: Record<string, { title: string; blurb: string }>;
 }): Building {
   const floors = [...input.floors].sort((a, b) => a.level - b.level);
   const movementBySlug = new Map(input.movements.map((m) => [m.slug, m]));
@@ -634,6 +638,7 @@ export function buildBuilding(input: {
             palette: movement.palette,
             pattern: movement.placeholderPattern,
             studioOpen: movement.studio.status === "available",
+            station: input.stations?.[movement.slug] ? `/studio/${movement.slug}` : undefined,
           },
           level: i,
           rect,
@@ -644,6 +649,26 @@ export function buildBuilding(input: {
           emptySlots,
         });
         items.push({ kind: "lectern", x: stand.x, z: stand.z, w: 0.6, d: 0.6, rot: yawOf(inward), solid: true });
+
+        // A hands-on station: a kiosk on the other side of the way in, facing into the room.
+        const station = input.stations?.[movement.slug];
+        if (station) {
+          const at = {
+            x: ringDoor.x + inward.x * 2.1 - side.x * sideSign * 1.9,
+            z: ringDoor.z + inward.z * 2.1 - side.z * sideSign * 1.9,
+          };
+          portals.push({
+            id: `station-${movement.slug}`,
+            level: i,
+            title: station.title,
+            blurb: station.blurb,
+            href: `/studio/${movement.slug}`,
+            at,
+            yaw: yawOf(inward),
+            kind: "station",
+          });
+          items.push({ kind: "kiosk", x: at.x, z: at.z, w: 0.6, d: 0.6, rot: yawOf(inward), solid: true, variant: 3 });
+        }
 
         // Benches down the middle of the room, facing the long walls.
         if (spots.length >= 4) {

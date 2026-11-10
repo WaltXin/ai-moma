@@ -79,4 +79,10 @@ Rough order. Each item is a good first PR area.
       performance, software (see [MOMA_CATALOG.md](MOMA_CATALOG.md#good-first-picks))
 - [ ] MDX learn pages with images (public domain or licensed only)
 - [ ] Guided tours and audio guides
+- [x] Hands-on station for Neo-Impressionism: paint with dots, step back to watch them mix,
+      read what you used (opposites touching, sun and shade from across the room), ask to hang it
+- [ ] A hands-on station for every movement (Fauvism's arbitrary colour, Cubism's many
+      viewpoints, De Stijl's grid and primaries, …)
+- [ ] Keep what visitors make: store requests and images (they're in memory now), a curator
+      queue, and approved work hung in the Community Gallery in the walk
 - [ ] i18n
