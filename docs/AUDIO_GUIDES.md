@@ -114,25 +114,32 @@ Don't translate word for word.
 
 ## Worked example: *A Sunday on La Grande Jatte — 1884*
 
-The recording in the walk was made before this standard. It has the Look, How, Story and
-Look-again beats, but no open question and little on meaning. Here's the English it would
-become, beat by beat:
+The guide in the walk follows this standard (English 235 words, 88 seconds). Beat by beat,
+with where each part came from:
 
-1. **Look:** "Start with the woman on the right, in profile, a monkey on a leash at her feet.
-   Seurat added that monkey late, when he came back to the canvas after two years; once you
-   know, it looks almost staged." *(The added figures are in AIC's description.)*
-2. **Wonder:** "Now look across the park… Yet almost no one moves. One small girl in orange is
-   running. Why only her?"
-3. **How:** "Look closer and the grass breaks into dots. Seurat set pure colours side by
-   side… so your eye mixes them, and they flicker in a way mixed paint can't."
-4. **Story:** "He showed it in 1886 at the last Impressionist exhibition…" *(AIC exhibition
-   history.)*
-5. **Meaning:** "…modern Parisians, posed as still as figures on an ancient frieze. After this,
-   painters had to decide whether a picture was a glimpse or something built."
-6. **Look again:** "Two last things to look for: the strange orange shapes poking in at the
-   right edge, and the painted border of dots he added later."
+1. **Look:** "Start with the woman on the right, in profile, and look down at her feet: a
+   monkey on a leash. Seurat added that monkey late, when he came back to the canvas two
+   years after starting it." *(The added figures: AIC description.)*
+2. **Wonder:** "…People sit, stroll, fish and doze, yet almost nobody moves. Only one small girl
+   in orange, just left of the couple on the right, is running. Why only her?" *(Checked
+   on the image: she's there, and she's the only one running.)*
+3. **How:** "Step closer and the grass breaks into dots… He set touches of pure colour side by
+   side, orange against blue, yellow against violet, and left your eye to mix them from a
+   distance." *(AIC description and short description; the Neo-Impressionism page.)*
+4. **Story:** "He made many sketches first, and the canvas is more than three metres wide. He
+   showed it in 1886, at the last Impressionist exhibition." *(AIC dimensions, 308 cm, and
+   exhibition history; Wikidata for "last".)*
+5. **Meaning:** "…Seurat wanted them as still as the figures on an ancient Greek frieze. The
+   Impressionists caught a passing moment. Here a moment is built, dot by dot, and painters
+   such as Paul Signac took up the method." *(AIC description; the Impressionism and
+   Neo-Impressionism pages.)*
+6. **Look again:** "Before you go, find the blue dots hidden in the shade of the grass, and
+   the border of dots he painted around the edge a few years later." *(Checked on the image;
+   AIC dates the border 1888–89.)*
 
-Its sources are in `guideSources["aic-27992"]`.
+What the rewrite fixed: the first script had no question and little on meaning, and said
+the canvas was "nearly three metres wide" when it's 308 cm. Checking every number against
+the record is what caught that. Its sources are in `guideSources["aic-27992"]`.
 
 ## Later layers (not built yet)
 
