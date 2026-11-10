@@ -18,6 +18,21 @@ export const GUIDE_LANG_NAMES: Record<GuideLang, string> = {
 /** Scripts, by artwork id, then language. */
 export type Guides = Record<string, Partial<Record<GuideLang, string>>>;
 
+/** Where a script's facts come from (`docs/AUDIO_GUIDES.md`): the holding museum's record first. */
+export type GuideSource = { label: string; url: string; licence?: string };
+
+/** Length a script should have in each language, as `docs/AUDIO_GUIDES.md` sets it (words, or characters for Chinese). */
+export const GUIDE_LENGTH: Record<GuideLang, { min: number; max: number; unit: "words" | "characters" }> = {
+  en: { min: 200, max: 240, unit: "words" },
+  fr: { min: 200, max: 290, unit: "words" },
+  zh: { min: 380, max: 520, unit: "characters" },
+};
+
+/** A script's length in its language's unit. */
+export function guideLength(text: string, lang: GuideLang): number {
+  return GUIDE_LENGTH[lang].unit === "words" ? text.trim().split(/\s+/).length : [...text.trim()].length;
+}
+
 /** A voiced script: its file, its length, and the text it was made from. */
 export type GuideAudio = { src: string; seconds: number; hash: string };
 export type GuidesAudio = Partial<Record<GuideLang, Record<string, GuideAudio>>>;
