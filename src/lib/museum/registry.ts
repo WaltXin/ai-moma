@@ -1,8 +1,11 @@
 import { exhibitions as allExhibitions } from "@/content/exhibitions";
 import { floors as allFloors } from "@/content/floors";
+import { guides as allGuides } from "@/content/guides";
+import { guidesAudio } from "@/content/guides-audio.generated";
 import { movements as allMovements } from "@/content/movements";
 import { worlds as allWorlds } from "@/content/worlds";
 import { RECIPES } from "@/lib/studio-art";
+import { GUIDE_LANGS, type GuideLang, guideHash } from "./guides";
 import type { Artwork, Exhibition, Floor, Movement, PaintingWorld } from "./types";
 
 /**
@@ -189,4 +192,29 @@ export function validateMuseum(
   }
 
   return problems;
+}
+
+/** A work's audio guide in one language: its script, and its voice if the voice was made from this script. */
+export type GuideEntry = { text: string; audio?: { src: string; seconds: number } };
+
+/** Ids of the works with an audio guide. */
+export function getGuideIds(): string[] {
+  return Object.keys(allGuides);
+}
+
+/**
+ * A work's audio guide in every language it has. Audio recorded from an older
+ * version of a script is left out, so a visitor never hears one thing and reads another.
+ */
+export function getGuide(id: string): Partial<Record<GuideLang, GuideEntry>> | undefined {
+  const byLang = allGuides[id];
+  if (!byLang) return undefined;
+  const out: Partial<Record<GuideLang, GuideEntry>> = {};
+  for (const lang of GUIDE_LANGS) {
+    const text = byLang[lang];
+    if (!text) continue;
+    const audio = guidesAudio[lang]?.[id];
+    out[lang] = audio && audio.hash === guideHash(text) ? { text, audio: { src: audio.src, seconds: audio.seconds } } : { text };
+  }
+  return out;
 }

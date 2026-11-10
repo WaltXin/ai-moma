@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Agamograph } from "@/components/agamograph";
+import { AudioGuide } from "@/components/audio-guide";
 import { ArtworkPlaceholder } from "@/components/artwork-frame";
 import { Arrow, BUTTON, TEXT_LINK } from "@/components/gallery/wall-parts";
 import { type ScreenRect, ZoomImage, type ZoomImageHandle } from "@/components/zoom-image";
 import type { Building, PlanArtwork, PlanRoom, Portal } from "@/lib/walk/building";
+import { getAudio } from "./audio";
 
 /** A floor as the lift and the directory list it. */
 export type FloorChoice = { slug: string; level: number; name: string; tagline?: string };
@@ -128,6 +130,7 @@ export function ArtworkViewer({
   }, []);
 
   const alt = `${art.title} by ${art.artist}`;
+  const underVoice = useCallback((on: boolean) => getAudio()?.underVoice(on), []);
 
   return (
     <div
@@ -232,6 +235,8 @@ export function ArtworkViewer({
             </p>
           )}
         </div>
+
+        <AudioGuide key={art.id} artId={art.id} onSpeaking={underVoice} />
 
         <p className="mt-6 border-t border-line pt-4 text-sm text-muted">
           In{" "}

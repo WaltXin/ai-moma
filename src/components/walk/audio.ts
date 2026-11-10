@@ -81,6 +81,8 @@ export function startAudio(withSound?: boolean): MuseumAudio | null {
 export class MuseumAudio {
   readonly ctx: AudioContext;
   muted: boolean;
+  private focused = false;
+  private voiced = false;
   /** Everything musical goes through here, so a painting up close can muffle it. */
   readonly musicBus: GainNode;
   /** Send to the shared reverb. */
@@ -296,9 +298,16 @@ export class MuseumAudio {
 
   /** Up close to a painting, the music steps back and softens. */
   focus(on: boolean) {
+    this.focused = on;
     const t = this.ctx.currentTime;
     this.musicTone.frequency.setTargetAtTime(on ? 1100 : 16000, t, 0.35);
-    this.musicLevel.gain.setTargetAtTime(on ? 0.22 : 0.34, t, 0.35);
+    this.musicLevel.gain.setTargetAtTime(this.voiced ? 0.05 : on ? 0.22 : 0.34, t, 0.35);
+  }
+
+  /** While an audio guide speaks, the music sinks almost away, and comes back after. */
+  underVoice(on: boolean) {
+    this.voiced = on;
+    this.focus(this.focused);
   }
 
   footstep(surface: Surface, strength = 1) {
