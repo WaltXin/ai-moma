@@ -17,9 +17,9 @@
     "meditation:voice": "node --no-warnings scripts/voice-meditation.mjs"
   },
   "dependencies": {
-    "next": "16.4.4",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "three": "0.187.0",
     "zod": "^4.6.7"
   },
@@ -30,7 +30,7 @@
     "@types/react-dom": "^19",
     "@types/three": "0.187.0",
     "eslint": "^9",
-    "eslint-config-next": "16.4.4",
+    "eslint-config-next": "16.4.5",
     "prettier": "^3.9.10",
     "sharp": "0.35.5",
     "tailwindcss": "^4",
