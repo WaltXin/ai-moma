@@ -14,6 +14,7 @@ as people contribute them. Visitors can:
 - 🏛 **Visit**: walk into the museum from the street: through the lobby, up the grand stair,
   round a skylit atrium and through seven floors of galleries (keyboard or tap). Take the
   stairs or the glass lift, and walk up to a painting to see it full-size with its wall label.
+  On the eighth floor, Vibe, step into a painting and sit, breathe and meditate inside it.
 - 📚 **Learn**: short, plain-language guides to how each movement worked and why it mattered.
 - 🎨 **Create**: upload a photo or write a prompt and have an AI model render it in a
   movement's style (for example, turn your selfie into a Pop Art silkscreen grid).

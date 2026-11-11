@@ -19,6 +19,7 @@ import {
   getFloors,
   getMovement,
   getMovements,
+  getWorldsOnFloor,
 } from "@/lib/museum/registry";
 import type { Artwork, Exhibition, Floor } from "@/lib/museum/types";
 
@@ -81,10 +82,12 @@ export default function LobbyPage() {
   // Walk in on the first floor that has art on its walls.
   const firstHung = floors.find((f) => getExhibitionsOnFloor(f).some((e) => e.artworks.length > 0));
   // Historical order up the building, ending on the visitors' own floor.
-  const community = floors.filter((f) =>
-    getExhibitionsOnFloor(f).every((e) => e.kind === "community"),
+  const worldFloors = floors.filter((f) => getWorldsOnFloor(f).length > 0);
+  const community = floors.filter(
+    (f) =>
+      !worldFloors.includes(f) && getExhibitionsOnFloor(f).every((e) => e.kind === "community"),
   );
-  const curated = floors.filter((f) => !community.includes(f));
+  const curated = floors.filter((f) => !community.includes(f) && !worldFloors.includes(f));
 
   const works = exhibitions.flatMap((e) => e.artworks);
   const publicDomain = works.filter((a) => a.credit).length;
@@ -167,6 +170,9 @@ export default function LobbyPage() {
         {curated.map((floor) => (
           <FloorWall key={floor.slug} floor={floor} />
         ))}
+        {worldFloors.map((floor) => (
+          <WorldsWall key={floor.slug} floor={floor} />
+        ))}
         {community.map((floor) => (
           <CommunityWall key={floor.slug} floor={floor} />
         ))}
@@ -241,6 +247,57 @@ function FloorWall({ floor }: { floor: Floor }) {
 
       <div className="mt-14 md:mt-20">
         <LineHang items={hang} />
+      </div>
+    </section>
+  );
+}
+
+/** A floor of painting worlds: no walls to hang, only doors to step through. */
+function WorldsWall({ floor }: { floor: Floor }) {
+  const worlds = getWorldsOnFloor(floor);
+
+  return (
+    <section
+      data-wall=""
+      style={wallVars(floorWall(floor.slug))}
+      aria-labelledby={`floor-${floor.slug}`}
+      className="py-20 md:py-28"
+    >
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="grid gap-x-10 gap-y-8 md:grid-cols-12">
+          <p aria-hidden className="floor-numeral text-[clamp(6rem,14vw,11rem)] md:col-span-2">
+            {floor.level}
+          </p>
+          <div className="md:col-span-6">
+            <h2
+              id={`floor-${floor.slug}`}
+              className="wall-title text-[clamp(2.25rem,4.6vw,4.25rem)]"
+            >
+              <span className="sr-only">Floor {floor.level}: </span>
+              {floor.name}
+            </h2>
+            <p className="mt-4 max-w-[42ch] text-lg text-muted">{floor.tagline}</p>
+            <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
+              <Link href={`/floors/${floor.slug}`} className={BUTTON}>
+                Go up to {floor.name}
+                <Arrow />
+              </Link>
+            </div>
+          </div>
+          <ol className="divide-y divide-line border-y border-line md:col-span-4 md:self-end">
+            {worlds.map((world) => (
+              <li key={world.slug} className="flex items-baseline justify-between gap-4 py-3">
+                <Link
+                  href={`/worlds/${world.slug}`}
+                  className="font-semibold underline-offset-4 hover:underline"
+                >
+                  {world.title}
+                </Link>
+                <span className="shrink-0 text-right text-sm text-muted">Walk in · meditate</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
   );

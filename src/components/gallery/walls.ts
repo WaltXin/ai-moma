@@ -38,6 +38,8 @@ const FLOOR_WALLS: Record<string, Wall> = {
   postwar: { wall: "#f7f7f5", ink: "#121212", muted: "#5c5c5c", line: "#dcdcd9" },
   pop: { wall: "#f6c500", ink: "#141414", muted: "#463a00", line: "#d7aa00" },
   perception: { wall: "#0d0d0f", ink: "#f2f2f2", muted: "#a4a4aa", line: "#2b2b30" },
+  // Night blue, the colour of the hour before dawn: a floor to be quiet on.
+  vibe: { wall: "#0e1a3d", ink: "#e9eefb", muted: "#aebbd8", line: "#2b3b6b" },
   community: { wall: "#ff2e63", ink: "#17070b", muted: "#4a0c1c", line: "#ff6f93" },
 };
 

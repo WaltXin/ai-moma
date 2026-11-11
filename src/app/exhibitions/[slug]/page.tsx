@@ -18,13 +18,14 @@ import {
 } from "@/components/gallery/wall-parts";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
-import { Creators } from "@/components/worlds/creators";
+import { WorldDoor } from "@/components/worlds/world-door";
 import {
   getExhibition,
   getExhibitions,
   getExhibitionsOnFloor,
   getFloorForExhibition,
   getMovement,
+  getFloorForWorld,
   getWorlds,
   getWorldsForRoom,
 } from "@/lib/museum/registry";
@@ -63,6 +64,10 @@ async function RoomWalls({ params }: { params: PageProps<"/exhibitions/[slug]">[
   const rooms = floor ? getExhibitionsOnFloor(floor) : [exhibition];
   const nextRoom = rooms[rooms.findIndex((r) => r.slug === exhibition.slug) + 1];
   const upstairs = floor && !nextRoom ? nextFloor(floor) : undefined;
+  const worlds = getWorldsForRoom(exhibition.slug);
+  const worldFloors = [
+    ...new Set(worlds.flatMap((w) => getFloorForWorld(w.slug) ?? [])),
+  ];
 
   return (
     <WallRepaint id={`room-${exhibition.slug}`} initial={wall}>
@@ -103,9 +108,19 @@ async function RoomWalls({ params }: { params: PageProps<"/exhibitions/[slug]">[
           </div>
         </section>
 
-        {getWorldsForRoom(exhibition.slug).map((w) => (
-          <WorldDoor key={w.slug} world={w} />
+        {/* Worlds on a floor of their own are entered there; any others, from this room. */}
+        {worldFloors.map((f) => (
+          <WorldsUpstairs
+            key={f.slug}
+            floor={f}
+            worlds={worlds.filter((w) => getFloorForWorld(w.slug) === f)}
+          />
         ))}
+        {worlds
+          .filter((w) => !getFloorForWorld(w.slug))
+          .map((w) => (
+            <WorldDoor key={w.slug} world={w} />
+          ))}
         {nextRoom && <NextRoom room={nextRoom} />}
         {upstairs && floor && <ElevatorDoors from={floor} to={upstairs} />}
       </div>
@@ -113,42 +128,35 @@ async function RoomWalls({ params }: { params: PageProps<"/exhibitions/[slug]">[
   );
 }
 
-/** A way into a painting's world, after the room's own works. */
-function WorldDoor({ world }: { world: PaintingWorld }) {
+/** Where to step into the room's paintings: the floor their worlds are on. */
+function WorldsUpstairs({ floor, worlds }: { floor: Floor; worlds: PaintingWorld[] }) {
   return (
-    <section aria-labelledby={`world-${world.slug}`} className="bg-[#0e1a3d] text-[#e9eefb]">
+    <section aria-labelledby="worlds-upstairs" className="bg-[#0e1a3d] text-[#e9eefb]">
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-12 sm:px-6 md:grid-cols-12 md:py-16">
         <div className="md:col-span-7">
           <p className="text-sm font-semibold tracking-wide text-[#f8e27a] uppercase">
             Step into a painting
           </p>
-          <h2
-            id={`world-${world.slug}`}
-            className="mt-3 text-3xl leading-tight font-semibold md:text-4xl"
-          >
-            {world.title}
+          <h2 id="worlds-upstairs" className="mt-3 text-3xl leading-tight font-semibold md:text-4xl">
+            Floor {floor.level}: {floor.name}
           </h2>
-          <p className="mt-1 text-[#aebbd8]">
-            After {world.artist}, {world.year}
-          </p>
-          <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-pretty">{world.intro}</p>
-          {world.creators?.length ? (
-            <p className="mt-4 text-sm text-[#aebbd8]">
-              A painting world by{" "}
-              <Creators
-                creators={world.creators}
-                className="text-[#e9eefb] underline underline-offset-2"
-              />
-              .
-            </p>
-          ) : null}
+          <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-pretty">{floor.tagline}</p>
+          <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
+            {worlds.map((w) => (
+              <li key={w.slug}>
+                <Link href={`/worlds/${w.slug}`} className="underline underline-offset-4">
+                  {w.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="flex items-end md:col-span-5 md:justify-end">
           <Link
-            href={`/worlds/${world.slug}`}
+            href={`/floors/${floor.slug}`}
             className="inline-flex items-center gap-2 bg-[#f3efe2] px-5 py-3 font-semibold text-[#141414]"
           >
-            Walk into it <Arrow />
+            Go up to {floor.name} <Arrow />
           </Link>
         </div>
       </div>

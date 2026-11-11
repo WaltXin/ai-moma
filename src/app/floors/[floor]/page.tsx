@@ -17,7 +17,14 @@ import {
 import { FLOOR_LABS } from "@/components/perception/perception-lab";
 import { WallRepaint } from "@/components/gallery/wall-repaint";
 import { floorWall, wallVars } from "@/components/gallery/walls";
-import { getExhibitionsOnFloor, getFloor, getFloors, getMovement } from "@/lib/museum/registry";
+import { WorldDoor } from "@/components/worlds/world-door";
+import {
+  getExhibitionsOnFloor,
+  getFloor,
+  getFloors,
+  getMovement,
+  getWorldsOnFloor,
+} from "@/lib/museum/registry";
 import type { Exhibition } from "@/lib/museum/types";
 
 export function generateStaticParams() {
@@ -47,6 +54,7 @@ async function FloorWalls({ params }: { params: PageProps<"/floors/[floor]">["pa
 
   const floors = getFloors();
   const rooms = getExhibitionsOnFloor(floor);
+  const worlds = getWorldsOnFloor(floor);
   const wall = floorWall(floor.slug);
   const next = nextFloor(floor);
 
@@ -66,7 +74,15 @@ async function FloorWalls({ params }: { params: PageProps<"/floors/[floor]">["pa
                   <KeepHyphens text={floor.name} />
                 </h1>
                 <p className="mt-5 max-w-[44ch] text-lg text-muted md:text-xl">{floor.tagline}</p>
-                {rooms.some((r) => r.artworks.length > 0) && (
+                {worlds.length > 0 && (
+                  <p className="mt-5 max-w-[44ch] text-muted">
+                    Every world has its own weather and its own sound. Walk a while, find a place
+                    you like, then choose <span className="text-ink">Meditate</span>: drag
+                    the bar to set how long, with a voice to guide you or without. You sit down,
+                    the controls fall away, and a slow breath keeps time.
+                  </p>
+                )}
+                {(worlds.length > 0 || rooms.some((r) => r.artworks.length > 0)) && (
                   <Link href={`/floors/${floor.slug}/walk`} className={`${BUTTON} mt-8`}>
                     {FLOOR_LABS.has(floor.slug) ? "Step into the lab" : `Walk floor ${floor.level}`}
                     <Arrow />
@@ -108,6 +124,10 @@ async function FloorWalls({ params }: { params: PageProps<"/floors/[floor]">["pa
             <Room key={room.slug} room={room} />
           ))}
         </section>
+
+        {worlds.map((world) => (
+          <WorldDoor key={world.slug} world={world} />
+        ))}
 
         {next && <ElevatorDoors from={floor} to={next} />}
       </div>

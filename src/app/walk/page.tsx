@@ -9,7 +9,7 @@ import { WalkableBuilding } from "@/components/walk/walkable-building";
 export const metadata: Metadata = {
   title: "Walk the museum",
   description:
-    "Walk into AI MoMA in 3D: through the lobby, up the grand stair and round a skylit atrium, seven floors of modern art.",
+    "Walk into AI MoMA in 3D: through the lobby, up the grand stair and round a skylit atrium, floor after floor of modern art, and paintings to step into at the top.",
 };
 
 export default function WalkPage() {

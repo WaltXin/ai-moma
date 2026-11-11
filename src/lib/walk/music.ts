@@ -138,6 +138,19 @@ const FLOOR_MOODS: Record<string, Mood> = {
     range: [4, 13],
     pulse: true,
   },
+  // Vibe: very few notes, a long way apart, low and soft: a floor to be quiet on.
+  vibe: {
+    root: 57,
+    scale: [0, 2, 4, 7, 9],
+    chords: [
+      [0, 2, 4],
+      [3, 0, 1],
+    ],
+    beat: 0.95,
+    density: 0.16,
+    brightness: 1500,
+    range: [3, 10],
+  },
 };
 
 const DEFAULT_MOOD: Mood = {

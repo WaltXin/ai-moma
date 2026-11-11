@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { getExhibitionsOnFloor, getFloors, getMovements, getStation, getStationMovements } from "@/lib/museum/registry";
+import {
+  getExhibitionsOnFloor,
+  getFloors,
+  getMovements,
+  getStation,
+  getStationMovements,
+  getWorldsOnFloor,
+} from "@/lib/museum/registry";
 import { type Building, buildBuilding, inRect, spaceAt, stairPart } from "@/lib/walk/building";
 import {
   type Focus,
@@ -24,6 +31,12 @@ const building: Building = buildBuilding({
   movements: getMovements(),
   labs: ["perception"],
   stations: Object.fromEntries(getStationMovements().map((m) => [m, getStation(m)!])),
+  worlds: Object.fromEntries(
+    getFloors().map((f) => [
+      f.slug,
+      getWorldsOnFloor(f).map((w) => ({ slug: w.slug, title: w.title, blurb: w.intro })),
+    ]),
+  ),
 });
 
 /** Walks a route the way the walk does, in small steps; returns where it ends up. */
@@ -53,6 +66,22 @@ describe("the building", () => {
     }
     const works = floors.flatMap((f) => getExhibitionsOnFloor(f).flatMap((e) => e.artworks));
     expect(building.artworks.map((a) => a.id).sort()).toEqual(works.map((a) => a.id).sort());
+  });
+
+  it("gives every painting world a room of its own on its floor, with the way in at a kiosk", () => {
+    for (const floor of getFloors()) {
+      const level = building.levels.find((l) => l.slug === floor.slug)!;
+      for (const world of getWorldsOnFloor(floor)) {
+        const portal = building.portals.find((p) => p.id === `world-${world.slug}`);
+        expect(portal, world.slug).toBeDefined();
+        expect(portal!.level).toBe(level.index);
+        expect(portal!.href).toBe(`/worlds/${world.slug}`);
+        // The kiosk stands in the room named after the painting: somewhere to sit before and after.
+        const room = spaceAt(level, portal!.at);
+        expect(room?.name).toBe(world.title);
+        expect(room?.kind).toBe("lounge");
+      }
+    }
   });
 
   it("is plain data", () => {

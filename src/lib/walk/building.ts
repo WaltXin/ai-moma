@@ -138,7 +138,7 @@ export type Item = {
   variant?: number;
 };
 
-/** Something on a floor that leads elsewhere on the site: the Studio, a lab, a hands-on station, the learning guides. */
+/** Something on a floor that leads elsewhere on the site: the Studio, a lab, a hands-on station, the learning guides, a painting world. */
 export type Portal = {
   id: string;
   level: number;
@@ -148,8 +148,11 @@ export type Portal = {
   /** The kiosk or sign, and the yaw a visitor faces to read it. */
   at: Vec;
   yaw: number;
-  kind: "studio" | "lab" | "station" | "learn";
+  kind: "studio" | "lab" | "station" | "learn" | "world";
 };
+
+/** A painting world entered from a floor: what its kiosk says, and where it leads. */
+export type WorldDoor = { slug: string; title: string; blurb: string };
 
 export type PlanArtwork = {
   id: string;
@@ -333,6 +336,8 @@ export function buildBuilding(input: {
   labs?: string[];
   /** Movements with a hands-on station (`/studio/[movement]`), with what its kiosk says. */
   stations?: Record<string, { title: string; blurb: string }>;
+  /** Painting worlds entered from a floor, by the floor's slug: each gets a quiet room and a kiosk. */
+  worlds?: Record<string, WorldDoor[]>;
 }): Building {
   const floors = [...input.floors].sort((a, b) => a.level - b.level);
   const movementBySlug = new Map(input.movements.map((m) => [m.slug, m]));
@@ -394,7 +399,7 @@ export function buildBuilding(input: {
     // ── Which room goes where ───────────────────────────────────────────
     type Use =
       | { kind: "gallery"; exhibition: Exhibition; rect: Rect; slot: Slot | "community" }
-      | { kind: "lounge" | "reading" | "lab" | "studio"; rect: Rect; slot: Slot };
+      | { kind: "lounge" | "reading" | "lab" | "studio"; rect: Rect; slot: Slot; world?: WorldDoor };
     const uses: Use[] = [];
     const ringDoors = new Map<Slot, boolean>();
 
@@ -415,9 +420,17 @@ export function buildBuilding(input: {
         );
       }
       let filler = 0;
+      const worlds = [...(input.worlds?.[floor.slug] ?? [])];
+      if (exhibitions.length + worlds.length > slots.length) {
+        throw new Error(
+          `Floor ${floor.level} has ${exhibitions.length} exhibitions and ${worlds.length} worlds; the building has rooms for ${slots.length}.`,
+        );
+      }
       slots.forEach((slot, k) => {
         const exhibition = exhibitions[k];
         if (exhibition) uses.push({ kind: "gallery", exhibition, rect: SLOTS[slot], slot });
+        // A world's room: a place to sit before stepping in, and after.
+        else if (worlds.length) uses.push({ kind: "lounge", rect: SLOTS[slot], slot, world: worlds.shift() });
         else if (labs.has(floor.slug) && !uses.some((u) => u.kind === "lab"))
           uses.push({ kind: "lab", rect: SLOTS[slot], slot });
         else uses.push({ kind: filler++ % 2 === 0 ? "lounge" : "reading", rect: SLOTS[slot], slot });
@@ -688,7 +701,7 @@ export function buildBuilding(input: {
 
       const name =
         u.kind === "lounge"
-          ? "Lounge"
+          ? (u.world?.title ?? "Lounge")
           : u.kind === "reading"
             ? "Reading Room"
             : u.kind === "lab"
@@ -710,6 +723,21 @@ export function buildBuilding(input: {
         }
         items.push({ kind: "plant", x: rect.x0 + 0.6, z: rect.z0 + 0.6, w: 0.6, d: 0.6, rot: 0, solid: true });
         items.push({ kind: "plant", x: rect.x1 - 0.6, z: rect.z1 - 0.6, w: 0.6, d: 0.6, rot: 0, solid: true });
+        if (u.world) {
+          // The way into the painting, just inside the door.
+          const at = { x: ringDoor.x + inward.x * 2.2, z: ringDoor.z + inward.z * 2.2 - 2.2 };
+          portals.push({
+            id: `world-${u.world.slug}`,
+            level: i,
+            title: u.world.title,
+            blurb: u.world.blurb,
+            href: `/worlds/${u.world.slug}`,
+            at,
+            yaw: yawOf(inward),
+            kind: "world",
+          });
+          items.push({ kind: "kiosk", x: at.x, z: at.z, w: 0.6, d: 0.6, rot: yawOf(inward), solid: true, variant: 4 });
+        }
       } else if (u.kind === "reading") {
         // Bookcases along the outer wall, long tables with lamps.
         const shelfX = west ? rect.x0 + 0.25 : rect.x1 - 0.25;

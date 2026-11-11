@@ -21,7 +21,7 @@ export type WorldPlace = {
   /** The colour behind the canvas while the world is painted. */
   background: string;
   /** What a footstep lands on, for its sound; steps are silent if not given. */
-  footing?: "grass";
+  footing?: "grass" | "wood";
   /** The air of the place, for its sound; still if not given. */
   air?: Air;
   /** A colour the corners of the view darken to, as the eye loses the edges at night. */
@@ -30,9 +30,17 @@ export type WorldPlace = {
 
 /**
  * What the air of a place sounds like, each from 0 (none) to 1: wind coming
- * in gusts, crickets in the grass, and a bell tolling far off now and then.
+ * in gusts, crickets in the grass at night, cicadas in the heat of the day,
+ * and a bell tolling far off now and then. `indoors` puts it all outside a
+ * window: the place is a room, and sounds like one.
  */
-export type Air = { wind: number; crickets: number; bell: number };
+export type Air = {
+  wind: number;
+  crickets: number;
+  bell: number;
+  cicadas?: number;
+  indoors?: boolean;
+};
 
 /** How far behind where they'll stand a visitor comes in from, in metres. */
 const WALK_IN = 4.5;

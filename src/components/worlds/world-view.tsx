@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Arrow } from "@/components/gallery/wall-parts";
 import { getAudio, startAudio } from "@/components/walk/audio";
 import { Stick } from "@/components/walk/stick";
 import type { PaintingWorld } from "@/lib/museum/types";
+import { type Cue, SITTING, cueSeconds, guidanceFor } from "@/lib/worlds/meditation";
 import { arrivalOf } from "@/lib/worlds/place";
 import { getPlace } from "@/lib/worlds/places";
 import { Creators } from "./creators";
@@ -23,6 +24,14 @@ import { SCENES } from "./scenes";
  * fades away, leaving only the painting. In full screen they fade sooner,
  * sitting or not; move the mouse, tap, or press a key to bring them back. Nothing here can be touched or
  * changed: you are part of its weather.
+ *
+ * "Meditate" is sitting with a clock: for as long as the visitor sets by
+ * dragging a bar (1 to 30 minutes), a ring low in the view swells with each
+ * breath in and sinks with each breath out, the same breath is heard as a
+ * soft tone (so the eyes can close), a bowl is struck to begin and three
+ * times to end, and the screen is kept awake. With guidance, a voice settles
+ * them, speaks a few times with long silences between, and says when the end
+ * is near; its words show too, for anyone sitting in silence. Standing up ends it.
  *
  * The three.js scene loads on demand, behind a welcome card that says what
  * the painting is and where the real one hangs.
@@ -53,6 +62,13 @@ const MIN_PITCH = -0.7;
 const FADE_AFTER = 4;
 /** In full screen, seconds without a tap, key or mouse move before they fade. */
 const FADE_COVERED = 2.5;
+/** A meditation's breath: seconds in, seconds out. Six breaths a minute, the pace that calms. */
+const BREATH_IN = 4;
+const BREATH_OUT = 6;
+/** Where the visitor's last choice of sitting is kept, in their browser. */
+const SITTING_PREF = "ai-moma:sitting";
+/** How far the view rises with a breath in, while meditating (metres). */
+const BREATH_RISE = 0.014;
 
 const MOVE_KEYS = new Set([
   "w",
@@ -71,9 +87,59 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 
 type Mode = "loading" | "ready" | "unsupported";
 
-export function WorldView({ world }: { world: PaintingWorld }) {
+/** The page's clock, in milliseconds: the one animation frames are timed by. */
+const pageClock = () => performance.now();
+
+/** How full the lungs are, 0 to 1, `t` seconds into a meditation. */
+function breathAt(t: number): number {
+  const p = t % (BREATH_IN + BREATH_OUT);
+  return p < BREATH_IN ? smooth(p / BREATH_IN) : 1 - smooth((p - BREATH_IN) / BREATH_OUT);
+}
+
+/** Minutes and seconds left of a sitting, counted only while it's looked at. */
+function Remaining({ endAt }: { endAt: number }) {
+  const [left, setLeft] = useState(() => Math.max(0, endAt - performance.now()));
+  useEffect(() => {
+    const id = window.setInterval(() => setLeft(Math.max(0, endAt - performance.now())), 500);
+    return () => window.clearInterval(id);
+  }, [endAt]);
+  const s = Math.ceil(left / 1000);
+  return (
+    <span className="tabular-nums">
+      {Math.floor(s / 60)}:{String(s % 60).padStart(2, "0")}
+    </span>
+  );
+}
+
+/** The length and kind of sitting the visitor last chose, or the first offered. */
+function lastSitting(): { minutes: number; guided: boolean } {
+  const first = { minutes: SITTING.first, guided: true };
+  if (typeof window === "undefined") return first;
+  try {
+    const kept = JSON.parse(window.localStorage.getItem(SITTING_PREF) ?? "null");
+    const minutes = Math.round(Number(kept?.minutes));
+    if (minutes >= SITTING.min && minutes <= SITTING.max)
+      return { minutes, guided: kept.guided !== false };
+  } catch {
+    // Nothing kept, or nowhere to keep it.
+  }
+  return first;
+}
+
+export function WorldView({
+  world,
+  back,
+  guidance,
+}: {
+  world: PaintingWorld;
+  back: string;
+  /** The guided meditation's cues, with their voice. */
+  guidance: Record<string, Cue>;
+}) {
   const place = getPlace(world.slug);
   const { start, mood } = place;
+  // Out in the open, in the painting's own room, or (with no air of its own) a room of the museum.
+  const acoustics = !place.air ? "room" : place.air.indoors ? "interior" : "open";
   // Worked out once: where they come in, a few steps behind where they'll stand.
   const [arrival] = useState(() => arrivalOf(place));
   const shellRef = useRef<HTMLDivElement>(null);
@@ -94,6 +160,22 @@ export function WorldView({ world }: { world: PaintingWorld }) {
    */
   const [immersive, setImmersive] = useState(false);
   const covering = fullscreen || immersive;
+  /** A meditation under way: how long it is, and when it ends (on the page's clock). */
+  const [sitFor, setSitFor] = useState<{ minutes: number; endAt: number } | null>(null);
+  /** Choosing how long to sit, and whether to be guided. */
+  const [choosing, setChoosing] = useState(false);
+  const [plan, setPlan] = useState(lastSitting);
+  /** What the guide is saying now, shown as words too. */
+  const [caption, setCaption] = useState("");
+  const captionTimers = useRef<number[]>([]);
+  const barId = useId();
+  /** A sitting has just ended: its last words stay up a while. */
+  const [rested, setRested] = useState(false);
+  const sitting$ = useRef<{
+    stopSound: () => void;
+    timer: number;
+    lock: WakeLockSentinel | null;
+  } | null>(null);
 
   const game = useRef({
     x: arrival.x,
@@ -120,6 +202,9 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     sit: 0,
     sitting: false,
     sinceSit: 0,
+    /** When the meditation under way began (the page's clock), or 0. */
+    breathing: 0,
+    choosing: false,
     still: 0,
     covering: false,
     drag: null as {
@@ -137,6 +222,35 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     setQuiet(false);
   }, []);
 
+  /** Ends a meditation: when its time is up (`done`), or early. */
+  const endSitting = useCallback(
+    (done: boolean) => {
+      const s = sitting$.current;
+      if (!s) return;
+      sitting$.current = null;
+      window.clearTimeout(s.timer);
+      void s.lock?.release().catch(() => {});
+      // Ended early, the bowl isn't struck and the guide falls silent; at its end, the
+      // three strokes ring on and the guide has a last word.
+      if (!done) {
+        s.stopSound();
+        for (const id of captionTimers.current) window.clearTimeout(id);
+        captionTimers.current = [];
+        setCaption("");
+      }
+      game.current.breathing = 0;
+      setSitFor(null);
+      // The button that ended it is gone; keep the keys working.
+      containerRef.current?.focus({ preventScroll: true });
+      if (done) {
+        setRested(true);
+        window.setTimeout(() => setRested(false), 14000);
+      }
+      wake();
+    },
+    [wake],
+  );
+
   const setSit = useCallback(
     (on: boolean) => {
       const g = game.current;
@@ -145,10 +259,75 @@ export function WorldView({ world }: { world: PaintingWorld }) {
       g.sinceSit = 0;
       g.goal = null;
       setSitting(on);
+      // Standing up ends a meditation.
+      if (!on) endSitting(false);
       wake();
     },
-    [wake],
+    [wake, endSitting],
   );
+
+  const beginSitting = ({ minutes, guided }: { minutes: number; guided: boolean }) => {
+    endSitting(false);
+    try {
+      window.localStorage.setItem(SITTING_PREF, JSON.stringify({ minutes, guided }));
+    } catch {
+      // Not kept; they'll set it again next time.
+    }
+    setChoosing(false);
+    setRested(false);
+    setSit(true);
+    const g = game.current;
+    const seconds = minutes * 60;
+    g.breathing = pageClock();
+    // The controls fall away almost at once.
+    g.still = FADE_AFTER - 1.5;
+    // The guide's cues, placed along a sitting of this length: heard, and shown as words.
+    const cues = guided ? guidanceFor(seconds, world.slug, guidance) : [];
+    for (const id of captionTimers.current) window.clearTimeout(id);
+    captionTimers.current = cues.flatMap((cue) => [
+      window.setTimeout(() => setCaption(cue.text), cue.at * 1000),
+      window.setTimeout(
+        () => setCaption((now) => (now === cue.text ? "" : now)),
+        (cue.at + cueSeconds(cue) + 1.5) * 1000,
+      ),
+    ]);
+    const held = {
+      stopSound:
+        getAudio()?.meditate({
+          seconds,
+          breathIn: BREATH_IN,
+          breathOut: BREATH_OUT,
+          voice: cues.flatMap((cue) => (cue.audio ? [{ src: cue.audio.src, at: cue.at }] : [])),
+        }) ?? (() => {}),
+      timer: window.setTimeout(() => endSitting(true), seconds * 1000),
+      lock: null as WakeLockSentinel | null,
+    };
+    sitting$.current = held;
+    // Keep the screen from sleeping while they sit, where the browser can.
+    void navigator.wakeLock
+      ?.request("screen")
+      .then((lock) => {
+        if (sitting$.current === held) held.lock = lock;
+        else void lock.release();
+      })
+      .catch(() => {});
+    setSitFor({ minutes, endAt: g.breathing + seconds * 1000 });
+    containerRef.current?.focus({ preventScroll: true });
+  };
+
+  // Leaving the page ends it too.
+  useEffect(
+    () => () => {
+      endSitting(false);
+      for (const id of captionTimers.current) window.clearTimeout(id);
+    },
+    [endSitting],
+  );
+
+  // While they're choosing, the controls stay.
+  useEffect(() => {
+    game.current.choosing = choosing;
+  }, [choosing]);
 
   // ── The scene, loaded once the page is up ──
   useEffect(() => {
@@ -218,6 +397,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
           if (g.sitting) {
             g.sitting = false;
             setSitting(false);
+            endSitting(false);
           }
           running = k.has("Shift");
           const speed = running ? RUN : WALK;
@@ -281,9 +461,14 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         }
         // Holding the stick keeps it in sight.
         if (g.stick.x || g.stick.y) g.still = 0;
-        if (g.sitting || g.covering) {
+        if (g.choosing) g.still = 0;
+        else if (g.sitting || g.covering) {
           g.still += dt;
-          if (g.still > (g.covering ? FADE_COVERED : FADE_AFTER)) setQuiet(true);
+          if (g.still > (g.covering ? FADE_COVERED : FADE_AFTER)) {
+            setQuiet(true);
+            // The choice of how long to sit goes away with the controls.
+            setChoosing(false);
+          }
         }
 
         // ── The walk: each step a rise and fall of the head, a lean onto the standing foot, a footfall ──
@@ -296,7 +481,11 @@ export function WorldView({ world }: { world: PaintingWorld }) {
           g.steps = steps;
           // Louder the faster they go.
           if (place.footing && speed > 0.4)
-            getAudio()?.footstep(place.footing, Math.min(1.25, 0.5 + speed / RUN));
+            // Boards ring under a foot; here they're a table under a very small one.
+            getAudio()?.footstep(
+              place.footing,
+              Math.min(1.25, 0.5 + speed / RUN) * (place.footing === "wood" ? 0.4 : 1),
+            );
         }
         g.gait += ((g.calm ? 0 : Math.min(1, speed / 0.9)) - g.gait) * Math.min(1, dt * 6);
         const sway = g.gait * (running ? 1.35 : 1);
@@ -305,7 +494,12 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         // One lean to each side every two steps.
         const lean = Math.sin(g.phase) * sway;
         // Standing or sitting still, they still breathe.
-        const breath = g.calm ? 0 : Math.sin(g.clock * 1.15) * 0.005 * (1 - g.gait);
+        // Meditating, the view rises and sinks with the breath the ring keeps.
+        const breath = g.calm
+          ? 0
+          : g.breathing
+            ? (breathAt((now - g.breathing) / 1000) - 0.5) * BREATH_RISE
+            : Math.sin(g.clock * 1.15) * 0.005 * (1 - g.gait);
         // The head follows the hand a moment behind, as a head does.
         const follow = Math.min(1, dt * HEAD);
         g.viewYaw += (g.yaw - g.viewYaw) * follow;
@@ -371,7 +565,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     const audio = startAudio(withSound);
     audio?.setMuted(!withSound);
     audio?.play(mood);
-    audio?.setPlace(place.air ? "open" : "room");
+    audio?.setPlace(acoustics);
     audio?.air(place.air ?? null);
     setSound(withSound && Boolean(audio));
     setEntered(true);
@@ -390,7 +584,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
     const on = audio.muted;
     audio.setMuted(!on);
     audio.play(mood);
-    audio.setPlace(place.air ? "open" : "room");
+    audio.setPlace(acoustics);
     if (on) audio.air(place.air ?? null);
     setSound(on);
   };
@@ -406,6 +600,8 @@ export function WorldView({ world }: { world: PaintingWorld }) {
   // ── Input ──
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!entered) return;
+    // The bar that sets a sitting's length takes the arrow keys itself.
+    if (e.target instanceof HTMLInputElement) return;
     const key = keyOf(e);
     // Walking in full screen leaves the controls hidden; any other key shows them.
     if (!covering || !MOVE_KEYS.has(key)) wake();
@@ -419,6 +615,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
       setHint(false);
     } else if (key === "c") {
       setSit(!game.current.sitting);
+    } else if (key === "m") {
+      // M to meditate: asks how long, or ends the one under way.
+      if (sitting$.current) endSitting(false);
+      else setChoosing((on) => !on);
     }
   };
   const onKeyUp = (e: React.KeyboardEvent) => game.current.keys.delete(keyOf(e));
@@ -488,7 +688,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onBlur={() => game.current.keys.clear()}
-        aria-label={`${world.title} in 3D. Use W and S or the up and down arrows to walk, A and D to step sideways, the left and right arrows to turn, and C to sit down or stand up.`}
+        aria-label={`${world.title} in 3D. Use W and S or the up and down arrows to walk, A and D to step sideways, the left and right arrows to turn, C to sit down or stand up, and M to meditate.`}
         style={{ background: place.background }}
         className={`relative w-full overflow-hidden outline-none ${
           covering ? "h-full" : "h-[max(460px,calc(100dvh-4.1rem))]"
@@ -521,6 +721,61 @@ export function WorldView({ world }: { world: PaintingWorld }) {
           className={`pointer-events-none absolute inset-0 bg-[#0b1638] transition-opacity duration-[2200ms] ease-out ${entered ? "opacity-0" : "opacity-70"}`}
         />
 
+        {/* The breath, kept low in the view: in as the ring swells, out as it sinks. */}
+        {sitFor && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-[11%] flex flex-col items-center gap-3 text-white"
+          >
+            <div className="relative grid size-28 place-items-center">
+              <div
+                className="breath-ring absolute inset-0 rounded-full border border-white/80 bg-white/10 shadow-[0_0_28px_rgba(255,255,255,0.35)]"
+                style={{ animationDuration: `${BREATH_IN + BREATH_OUT}s` }}
+              />
+              <div className="size-1.5 rounded-full bg-white/80" />
+            </div>
+            {/* The words for the first minute; after that the ring is enough. */}
+            <div className="breath-words relative h-6 w-40 text-center text-sm font-semibold tracking-wide [text-shadow:0_1px_8px_rgba(0,0,0,0.6)]">
+              <span
+                className="breath-in absolute inset-0"
+                style={{ animationDuration: `${BREATH_IN + BREATH_OUT}s` }}
+              >
+                Breathe in
+              </span>
+              <span
+                className="breath-out absolute inset-0"
+                style={{ animationDuration: `${BREATH_IN + BREATH_OUT}s` }}
+              >
+                Breathe out
+              </span>
+            </div>
+          </div>
+        )}
+        {/* What the guide is saying, for anyone sitting in silence or hard of hearing. */}
+        {caption && (
+          <p
+            key={caption}
+            aria-hidden
+            className="fade-in pointer-events-none absolute inset-x-0 bottom-[calc(11%+11.5rem)] mx-auto max-w-md px-6 text-center text-base leading-relaxed text-white [text-shadow:0_1px_10px_rgba(0,0,0,0.75)] sm:text-lg"
+          >
+            {caption}
+          </p>
+        )}
+        {rested && !sitFor && !caption && (
+          <p className="fade-in pointer-events-none absolute inset-x-0 bottom-[14%] px-6 text-center text-lg text-white [text-shadow:0_1px_10px_rgba(0,0,0,0.7)]">
+            That&apos;s the time. Stay as long as you like.
+          </p>
+        )}
+        <p role="status" className="sr-only">
+          {caption
+            ? caption
+            : sitFor
+            ? `Meditation started, ${sitFor.minutes} ${sitFor.minutes === 1 ? "minute" : "minutes"}. Breathe in for ${BREATH_IN} seconds and out for ${BREATH_OUT}; a soft tone rises and falls with the breath. A bowl rings three times at the end.`
+            : rested
+              ? "The meditation has ended. Stay as long as you like."
+              : ""}
+        </p>
+
         {mode === "unsupported" && (
           <div className="absolute inset-0 grid place-items-center p-6 text-center text-white">
             <p className="max-w-sm">
@@ -542,6 +797,10 @@ export function WorldView({ world }: { world: PaintingWorld }) {
                 After {world.artist}, {world.year}
               </p>
               <p className="mt-4 leading-relaxed">{world.intro}</p>
+              <p className="mt-3 leading-relaxed">
+                When you&apos;ve found a place you like, choose Meditate to sit and breathe there
+                for a few minutes.
+              </p>
               {world.creators?.length ? (
                 <p className="mt-4 text-sm text-[#5c5c5c]">
                   A painting world by <Creators creators={world.creators} />.
@@ -608,11 +867,108 @@ export function WorldView({ world }: { world: PaintingWorld }) {
               )}
             </div>
 
-            <div className="pointer-events-auto absolute right-3 bottom-3 flex flex-wrap justify-end gap-2 max-sm:flex-col max-sm:items-end">
+            <div className="pointer-events-auto absolute right-3 bottom-3 flex flex-wrap items-end justify-end gap-2 max-sm:flex-col">
+              {sitFor ? (
+                <button
+                  type="button"
+                  onClick={() => endSitting(false)}
+                  className="bg-[#f3efe2] px-4 py-2.5 text-sm font-semibold text-[#141414] shadow-lg"
+                >
+                  End meditation · <Remaining endAt={sitFor.endAt} />
+                </button>
+              ) : choosing ? (
+                <div
+                  role="group"
+                  aria-label="Meditate"
+                  className="w-72 max-w-[calc(100vw-1.5rem)] bg-[#f3efe2] p-4 text-[#141414] shadow-lg"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <label htmlFor={barId} className="text-sm font-semibold">
+                      Meditate for
+                    </label>
+                    <output htmlFor={barId} className="text-2xl font-semibold tabular-nums">
+                      {plan.minutes} min
+                    </output>
+                  </div>
+                  {/* Drag the bar to set how long. */}
+                  <input
+                    id={barId}
+                    type="range"
+                    autoFocus
+                    min={SITTING.min}
+                    max={SITTING.max}
+                    step={1}
+                    value={plan.minutes}
+                    onChange={(e) => setPlan({ ...plan, minutes: Number(e.target.value) })}
+                    aria-valuetext={`${plan.minutes} ${plan.minutes === 1 ? "minute" : "minutes"}`}
+                    style={{
+                      "--fill": `${((plan.minutes - SITTING.min) / (SITTING.max - SITTING.min)) * 100}%`,
+                    } as React.CSSProperties}
+                    className="sitting-bar mt-2 w-full"
+                  />
+                  <div aria-hidden className="flex justify-between text-xs text-[#5c5c5c]">
+                    <span>{SITTING.min} min</span>
+                    <span>drag to set</span>
+                    <span>{SITTING.max} min</span>
+                  </div>
+                  <div
+                    role="radiogroup"
+                    aria-label="Guidance"
+                    className="mt-4 grid grid-cols-2 border border-[#141414]/30 text-sm font-semibold"
+                  >
+                    {[true, false].map((guided) => (
+                      <button
+                        key={String(guided)}
+                        type="button"
+                        role="radio"
+                        aria-checked={plan.guided === guided}
+                        onClick={() => setPlan({ ...plan, guided })}
+                        className={`px-2 py-2 ${plan.guided === guided ? "bg-[#141414] text-white" : "hover:bg-white"}`}
+                      >
+                        {guided ? "With guidance" : "Without"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 min-h-[2.5rem] text-xs leading-relaxed text-[#5c5c5c]">
+                    {!plan.guided
+                      ? "Only the breath: the ring, the tone and the bowl."
+                      : sound
+                        ? "A voice settles you, speaks a few times, then leaves you to it."
+                        : "Sound is off, so the guidance will show as words."}
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => beginSitting(plan)}
+                      className="inline-flex flex-1 items-center justify-center gap-2 bg-[#141414] px-4 py-2.5 text-sm font-semibold text-white"
+                    >
+                      Begin <Arrow />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChoosing(false);
+                        containerRef.current?.focus({ preventScroll: true });
+                      }}
+                      className="px-3 py-2.5 text-sm font-semibold underline underline-offset-4"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setChoosing(true)}
+                  className="bg-[#f3efe2] px-4 py-2.5 text-sm font-semibold text-[#141414] shadow-lg"
+                >
+                  Meditate
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSit(!sitting)}
-                className="bg-[#f3efe2] px-4 py-2.5 text-sm font-semibold text-[#141414] shadow-lg"
+                className="bg-black/50 px-3 py-2.5 text-sm font-semibold text-white backdrop-blur-sm"
               >
                 {sitting ? "Stand up" : "Sit for a while"}
               </button>
@@ -631,7 +987,7 @@ export function WorldView({ world }: { world: PaintingWorld }) {
                 {covering ? "Exit full screen" : "Full screen"}
               </button>
               <Link
-                href={`/exhibitions/${world.room}`}
+                href={back}
                 className="inline-flex items-center gap-1.5 bg-black/50 px-3 py-2.5 text-sm font-semibold text-white backdrop-blur-sm"
               >
                 Back to the museum <Arrow />
