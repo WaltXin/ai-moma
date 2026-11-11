@@ -7,7 +7,9 @@ import { worldRandom } from "./random";
  * table is the ground, the jug stands as tall as a house, and fifteen
  * sunflowers in every stage of their lives hang overhead like trees, some
  * full and blazing, some drooping, some gone to seed, a few petals fallen
- * round the jug's foot. Behind it all, the yellow wall. Plain data (metres
+ * round the jug's foot. Behind it all, the yellow wall. The window is open on
+ * an August afternoon: its light lies on the table in four panes, a draught
+ * nods the flowers, and now and then one lets a petal go. Plain data (metres
  * at the visitor's size, radians), so tests can check it;
  * `components/worlds/sunflowers-scene.ts` raises it.
  *
@@ -141,6 +143,76 @@ export const FALLEN: { x: number; z: number; angle: number; len: number }[] = ((
   return out;
 })();
 
+/**
+ * The window's light on the table: a pool of four panes to the left of the
+ * jug and toward the visitor, turned as the sun slants it. `turn` is its
+ * angle on the table (radians, from x toward z).
+ */
+export const SUN_POOL = { x: -26, z: 20, w: 46, d: 34, turn: deg(-24) };
+
+/** The way the sun's light travels: down from the upper left, away from the visitor. */
+export const SUN_RAY = { x: 0.6, y: -0.7, z: -0.55 };
+
+/** How much of the window's light falls at a point on the table: 0 outside its pool, 1 inside a pane. */
+export function sunAt(x: number, z: number): number {
+  const c = Math.cos(SUN_POOL.turn);
+  const s = Math.sin(SUN_POOL.turn);
+  const dx = x - SUN_POOL.x;
+  const dz = z - SUN_POOL.z;
+  // Across the pool and along it, from −1 to 1.
+  const u = (dx * c + dz * s) / (SUN_POOL.w / 2);
+  const v = (-dx * s + dz * c) / (SUN_POOL.d / 2);
+  if (Math.abs(u) > 1 || Math.abs(v) > 1) return 0;
+  // The window's bars: one upright, one across.
+  const bar = (t: number) => smooth((Math.abs(t) - 0.03) / 0.05) * smooth((1 - Math.abs(t)) / 0.07);
+  return bar(u) * bar(v);
+}
+
+/** A petal let go by a flower: where it leaves, where it comes to rest, and its own time. */
+export type FallingPetal = {
+  from: { x: number; y: number; z: number };
+  to: { x: number; z: number };
+  /** Seconds from one fall to the next, and how far into that it starts. */
+  every: number;
+  offset: number;
+  len: number;
+  seed: number;
+};
+
+/** A few petals in the air at any time, each from a flower past its best. */
+export const FALLING: FallingPetal[] = (() => {
+  const rand = worldRandom(1889);
+  const tired = FLOWERS.filter((f) => f.stage !== "open");
+  const out: FallingPetal[] = [];
+  for (let i = 0; i < 9; i++) {
+    const f = tired[Math.floor(rand() * tired.length)];
+    const a = rand() * Math.PI * 2;
+    const from = {
+      x: JUG.x + f.x + Math.cos(a) * f.r * 0.6,
+      y: f.y + Math.sin(a) * f.r * 0.5,
+      z: JUG.z + f.z + f.r * 0.25,
+    };
+    // It drifts out from the jug as it falls, toward the visitor's side of the table.
+    let x = from.x + (rand() - 0.5) * 26;
+    let z = from.z + 6 + rand() * 22;
+    const d = Math.hypot(x - JUG.x, z - JUG.z);
+    const clear = JUG_RADIUS + 4;
+    if (d < clear) {
+      x = JUG.x + ((x - JUG.x) / d) * clear;
+      z = JUG.z + ((z - JUG.z) / d) * clear;
+    }
+    out.push({
+      from,
+      to: { x, z },
+      every: 44 + rand() * 40,
+      offset: rand(),
+      len: 2.4 + rand() * 1.6,
+      seed: rand(),
+    });
+  }
+  return out;
+})();
+
 /** Warm afternoon music for the table: bright, unhurried, a soft pulse under it. */
 export const AFTERNOON_MOOD: Mood = {
   // A4, in a major pentatonic.
@@ -168,4 +240,8 @@ export const SUNFLOWERS: WorldPlace = {
   mood: AFTERNOON_MOOD,
   ground: "the table",
   background: "#e6c45a",
+  footing: "wood",
+  // An open window on an August afternoon: cicadas in the heat outside, a draught, a bell across the town.
+  air: { wind: 0.3, crickets: 0, cicadas: 0.7, bell: 0.4, indoors: true },
+  vignette: "#4a2c08",
 };

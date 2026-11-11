@@ -3,18 +3,22 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { worldRandom } from "@/lib/worlds/random";
 import {
   FALLEN,
+  FALLING,
   FLOWERS,
   JUG,
   JUG_TOP,
   START,
+  SUN_POOL,
+  SUN_RAY,
   TABLE,
   WALL_Z,
   blocked,
   facing,
   heightAt,
   insideBounds,
+  sunAt,
 } from "@/lib/worlds/sunflowers";
-import { lerp, paintSurface, rgb, type RGB, type SkySpec } from "./brush";
+import { breathe, lerp, paintSurface, rgb, type RGB, type SkySpec } from "./brush";
 import {
   C,
   addGround,
@@ -36,7 +40,9 @@ import {
  * walk the yellow table, the jug towers over them, and fifteen sunflowers
  * hang overhead like trees, every one at its own stage of life. The seed
  * heads are dense spirals of thick dabs, the petals raised ribbons of
- * yellow and orange. Nothing moves but the light in the air.
+ * yellow and orange. The window is open: its light lies on the table in four
+ * panes, dust turns in it, the flowers nod in the draught, and now and then
+ * one lets a petal fall.
  */
 
 const pal = (xs: string[]) => xs.map(rgb);
@@ -44,6 +50,27 @@ const pick = <T>(xs: T[], r: () => number) => xs[Math.floor(r() * xs.length)];
 /** A painted colour (sRGB, 0–255) as three.js works with it. */
 const asColor = (c: RGB) =>
   new THREE.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace);
+
+/**
+ * The draught from the window: everything above the jug's lip nods with it,
+ * the more the higher it stands, and the petals tremble a little on their
+ * own. One motion for strokes, seed heads and stems alike, so they move as one flower.
+ */
+function nod(stage: Stage, shader: THREE.WebGLProgramParametersWithUniforms) {
+  shader.uniforms.uTime = stage.time;
+  shader.vertexShader = `uniform float uTime;\n${shader.vertexShader}`.replace(
+    "#include <begin_vertex>",
+    `#include <begin_vertex>
+      float nodK = smoothstep(${JUG_TOP.toFixed(1)}, ${(JUG_TOP + 38).toFixed(1)}, position.y);
+      float nodT = uTime * 0.36;
+      transformed.x += (sin(nodT + position.y * 0.012) * 0.75
+        + sin(nodT * 2.3 + position.x * 0.016) * 0.22) * nodK;
+      transformed.z += cos(nodT * 0.8 + position.x * 0.014) * 0.5 * nodK;
+      transformed.y += sin(nodT * 1.2 + position.x * 0.015 + position.z * 0.02) * 0.28 * nodK;
+      // The petals' own tremble.
+      transformed.y += sin(uTime * 1.6 + position.x * 1.1 + position.z * 0.9) * 0.05 * nodK;`,
+  );
+}
 
 /** The room beyond the table: the same yellow as the wall, hatched in short strokes. */
 function roomAir(): SkySpec {
@@ -84,6 +111,7 @@ function tableTop(): LandPaint {
   const line = pal(["#5a8a7a", "#4a7a8a", "#6a9a8a"]);
   const floor = pal(["#6a4a2a", "#5a3a20", "#7a5a30", "#4a3220"]);
   const seam = rgb("#a06818");
+  const sunlit = pal(["#f4c84a", "#f8d460", "#eebc3c", "#f6dc78"]);
   // The jug's shadow falls right and toward the visitor: the light comes from the left.
   const shadowness = (x: number, z: number) =>
     1 - smooth(Math.hypot((x - JUG.x - 9) / 20, (z - JUG.z - 6) / 13), 0.6, 1.1);
@@ -102,6 +130,8 @@ function tableTop(): LandPaint {
       if (z < TABLE.back + 2.5) return { color: pickRGB(line, r), relief };
       if (r() < 0.07) return { color: seam, relief: 0.2 };
       if (r() < shadowness(x, z)) return { color: pickRGB(shade, r), relief };
+      // The window's light is painted on: paler, warmer strokes where its four panes fall.
+      if (r() < sunAt(x, z) * 0.7) return { color: pickRGB(sunlit, r), relief };
       return { color: pickRGB(table, r), relief };
     },
   };
@@ -184,6 +214,7 @@ async function addJug(stage: Stage, ribbons: ReturnType<typeof strokeRibbons>) {
   const COUNT = low ? 1500 : 2200;
   const ALONG = 3;
   for (let i = 0; i < COUNT; i++) {
+    if (i % 400 === 399) await breathe();
     const theta0 = n() * Math.PI * 2;
     const y0 = n() * (JUG_TOP - 1);
     const len = 2 + n() * 1.6;
@@ -277,6 +308,8 @@ async function addFlowers(stage: Stage, ribbons: ReturnType<typeof strokeRibbons
   const stems: THREE.BufferGeometry[] = [];
 
   for (const f of FLOWERS) {
+    // One flower at a time, so the welcome stays responsive while they're painted.
+    await breathe();
     const n = worldRandom(300 + f.seed);
     const st = STAGES[f.stage];
     const centreAt = new THREE.Vector3(JUG.x + f.x, f.y, JUG.z + f.z);
@@ -463,7 +496,10 @@ async function addFlowers(stage: Stage, ribbons: ReturnType<typeof strokeRibbons
   const capMat = keep(
     new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }),
   );
-  customize(capMat, "caps", (shader) => glowInShade(shader, 0.35));
+  customize(capMat, "caps", (shader) => {
+    glowInShade(shader, 0.35);
+    nod(stage, shader);
+  });
   scene.add(new THREE.Mesh(keep(mergeGeometries(caps)), capMat));
   const stemTile = await stage.tile("flame", {
     angle: Math.PI / 2,
@@ -474,7 +510,10 @@ async function addFlowers(stage: Stage, ribbons: ReturnType<typeof strokeRibbons
     dark: 0.5,
   });
   const stemMat = stage.painted(stemTile, 1);
-  customize(stemMat, "stems", (shader) => glowInShade(shader, 0.3));
+  customize(stemMat, "stems", (shader) => {
+    glowInShade(shader, 0.3);
+    nod(stage, shader);
+  });
   scene.add(new THREE.Mesh(keep(mergeGeometries(stems)), stemMat));
   [...caps, ...stems].forEach((g) => g.dispose());
 }
@@ -507,6 +546,228 @@ function addFallen(ribbons: ReturnType<typeof strokeRibbons>) {
   }
 }
 
+/**
+ * The window's light itself, over the paint: a soft warm glow on the table
+ * where the panes fall, that comes and goes a little as thin cloud passes.
+ */
+function addSunPool(stage: Stage) {
+  const { keep, scene, time, texture } = stage;
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 192;
+  const g = c.getContext("2d")!;
+  const img = g.createImageData(c.width, c.height);
+  for (let j = 0; j < c.height; j++) {
+    for (let i = 0; i < c.width; i++) {
+      // The same panes the table's paint was laid by, a little softer.
+      const u = ((i + 0.5) / c.width - 0.5) * SUN_POOL.w;
+      const v = ((j + 0.5) / c.height - 0.5) * SUN_POOL.d;
+      const cs = Math.cos(SUN_POOL.turn);
+      const sn = Math.sin(SUN_POOL.turn);
+      const a = sunAt(SUN_POOL.x + u * cs - v * sn, SUN_POOL.z + u * sn + v * cs);
+      const k = (j * c.width + i) * 4;
+      img.data[k] = 255;
+      img.data[k + 1] = 232;
+      img.data[k + 2] = 160;
+      img.data[k + 3] = Math.round(a * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const geo = keep(new THREE.PlaneGeometry(SUN_POOL.w, SUN_POOL.d));
+  geo.rotateX(-Math.PI / 2);
+  geo.rotateY(-SUN_POOL.turn);
+  geo.translate(SUN_POOL.x, 0.09, SUN_POOL.z);
+  const mat = keep(
+    new THREE.MeshBasicMaterial({
+      map: texture(c, false),
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      opacity: 0.15,
+      fog: false,
+    }),
+  );
+  const pool = new THREE.Mesh(geo, mat);
+  pool.renderOrder = 2;
+  scene.add(pool);
+  stage.onFrame(() => {
+    const t = time.value;
+    mat.opacity = 0.15 + 0.04 * Math.sin(t * 0.21) + 0.02 * Math.sin(t * 0.53 + 1);
+  });
+}
+
+/** Dust in the air of the room, turning slowly; where it crosses the window's light it shows gold. */
+function addMotes(stage: Stage) {
+  const { low, keep, scene, time, renderer } = stage;
+  const n = worldRandom(90);
+  const COUNT = low ? 90 : 240;
+  const at: number[] = [];
+  const seed: number[] = [];
+  for (let i = 0; i < COUNT; i++) {
+    // Most of it low, where the visitor walks; some up among the flowers.
+    at.push(-70 + n() * 140, 0.6 + n() ** 1.7 * 46, -40 + n() * 110);
+    seed.push(n() * 6.283, 0.05 + n() * 0.09, n(), 0.5 + n() * 0.5);
+  }
+  const g = keep(new THREE.BufferGeometry());
+  g.setAttribute("position", new THREE.Float32BufferAttribute(at, 3));
+  g.setAttribute("aSeed", new THREE.Float32BufferAttribute(seed, 4));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 20, 15), 130);
+  const size = { value: 1 };
+  const cs = Math.cos(SUN_POOL.turn);
+  const sn = Math.sin(SUN_POOL.turn);
+  const mat = keep(
+    new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uSize: size },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        attribute vec4 aSeed;
+        uniform float uTime;
+        uniform float uSize;
+        varying float vGlow;
+        void main() {
+          float t = uTime * aSeed.y + aSeed.x;
+          // Each turns a slow loop of its own, and sinks and rises with the warm air.
+          vec3 p = position + vec3(
+            sin(t) * 3.0 + sin(t * 0.43 + aSeed.x) * 4.0,
+            sin(t * 0.7 + aSeed.x * 2.0) * 1.6,
+            cos(t * 0.8) * 3.0 + cos(t * 0.31 + aSeed.x) * 4.0);
+          // Where its light would land on the table: inside the window's pool, it's in the beam.
+          vec2 hit = p.xz + vec2(${SUN_RAY.x.toFixed(3)}, ${SUN_RAY.z.toFixed(3)}) * (p.y / ${(-SUN_RAY.y).toFixed(3)});
+          vec2 d = hit - vec2(${SUN_POOL.x.toFixed(2)}, ${SUN_POOL.z.toFixed(2)});
+          vec2 uv = vec2(d.x * ${cs.toFixed(4)} + d.y * ${sn.toFixed(4)}, -d.x * ${sn.toFixed(4)} + d.y * ${cs.toFixed(4)})
+            / vec2(${(SUN_POOL.w / 2).toFixed(2)}, ${(SUN_POOL.d / 2).toFixed(2)});
+          float beam = (1.0 - smoothstep(0.85, 1.05, abs(uv.x))) * (1.0 - smoothstep(0.85, 1.05, abs(uv.y)));
+          // A slow twinkle, as a mote turns its flat side to the light.
+          float turn = 0.7 + 0.3 * sin(uTime * (0.6 + aSeed.z) + aSeed.x * 5.0);
+          vGlow = (0.16 + 0.84 * beam) * turn * aSeed.w;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = min(uSize * (0.1 + 0.14 * aSeed.z) / -mv.z, 40.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying float vGlow;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          float a = smoothstep(1.0, 0.0, d);
+          gl_FragColor = vec4(vec3(1.0, 0.93, 0.7) * a * a * vGlow * 0.6, 1.0);
+          #include <colorspace_fragment>
+        }`,
+    }),
+  );
+  scene.add(new THREE.Points(g, mat));
+  const buffer = new THREE.Vector2();
+  stage.onFrame(() => {
+    // A point's size is given in pixels: keep it the same size in the world on any screen.
+    size.value = renderer.getDrawingBufferSize(buffer).y;
+  });
+}
+
+/**
+ * Petals in the air: each leaves a flower past its best, turns over and over
+ * on the way down, drifting out from the jug, lies on the table a while, and
+ * is gone before the next one falls from the same place.
+ */
+function addFalling(stage: Stage) {
+  const { keep, scene, time } = stage;
+  const colors = ["#f0b428", "#e89a18", "#d87a14", "#f4c440", "#c87018"].map(C);
+  const n = worldRandom(31);
+  const pos: number[] = [];
+  const from: number[] = [];
+  const to: number[] = [];
+  const when: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const ALONG = 4;
+  for (const p of FALLING) {
+    const base = pos.length / 3;
+    const c = colors[Math.floor(n() * colors.length)];
+    const w = p.len * 0.42;
+    for (let j = 0; j <= ALONG; j++) {
+      const t = j / ALONG;
+      // A petal's outline: broad past the middle, coming to a point; a shallow cup across it.
+      const ww = w * (0.3 + 0.7 * Math.sin(Math.PI * Math.min(1, 0.12 + t * 0.95)));
+      for (const k of [-1, 0, 1]) {
+        pos.push((k * ww) / 2, k === 0 ? 0.12 * w : 0, (t - 0.5) * p.len);
+        from.push(p.from.x, p.from.y, p.from.z);
+        to.push(p.to.x, p.to.z);
+        when.push(p.every, p.offset, p.seed);
+        // Lighter down the middle, as the raised strokes are.
+        const shade = k === 0 ? 1.08 : 0.86;
+        col.push(c.r * shade, c.g * shade, c.b * shade);
+      }
+      if (j > 0) {
+        const a = base + (j - 1) * 3;
+        const b = a + 3;
+        idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2);
+      }
+    }
+  }
+  const g = keep(new THREE.BufferGeometry());
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("aFrom", new THREE.Float32BufferAttribute(from, 3));
+  g.setAttribute("aTo", new THREE.Float32BufferAttribute(to, 2));
+  g.setAttribute("aWhen", new THREE.Float32BufferAttribute(when, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  // They move a long way from where they're listed; never cull them by that.
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(JUG.x, 30, JUG.z + 10), 120);
+  const mat = keep(
+    new THREE.ShaderMaterial({
+      uniforms: { uTime: time },
+      side: THREE.DoubleSide,
+      vertexShader: /* glsl */ `
+        attribute vec3 aFrom;
+        attribute vec2 aTo;
+        attribute vec3 aWhen;
+        attribute vec3 color;
+        uniform float uTime;
+        varying vec3 vColor;
+        varying float vLight;
+        // The fall takes a fixed time however long the wait between falls.
+        const float FALL = 17.0;
+        const float LIE = 16.0;
+        void main() {
+          float cycle = mod(uTime + aWhen.y * aWhen.x, aWhen.x);
+          float fall = clamp(cycle / FALL, 0.0, 1.0);
+          // Leaving the flower it's small; lying a while, it sinks away into the paint of the table.
+          float grown = smoothstep(0.0, 0.06, fall);
+          float gone = smoothstep(FALL + LIE, FALL + LIE + 3.0, cycle);
+          // It turns over as it falls, slower and slower, and lands flat.
+          float spin = (1.0 - fall) * (1.0 - fall) * (9.0 + aWhen.z * 7.0);
+          float yaw = aWhen.z * 6.283 + fall * 2.2;
+          float cr = cos(spin), sr = sin(spin);
+          float cy = cos(yaw), sy = sin(yaw);
+          vec3 q = position * grown;
+          // Roll about its length, then turn on the spot.
+          q = vec3(q.x * cr - q.y * sr, q.x * sr + q.y * cr, q.z);
+          q = vec3(q.x * cy + q.z * sy, q.y, -q.x * sy + q.z * cy);
+          vec3 n = vec3(-sr * cy, cr, sr * sy);
+          // Down in swoops from side to side, like anything light and flat.
+          float ease = fall * fall * (3.0 - 2.0 * fall);
+          float swoop = sin(fall * (10.0 + aWhen.z * 5.0)) * (1.0 - fall) * 4.5;
+          vec3 at = vec3(
+            mix(aFrom.x, aTo.x, ease) + swoop * cos(aWhen.z * 6.283),
+            mix(aFrom.y, 0.07, pow(fall, 1.25)) + abs(swoop) * 0.25,
+            mix(aFrom.z, aTo.y, ease) + swoop * sin(aWhen.z * 6.283));
+          at.y -= gone * 0.6;
+          vColor = color;
+          vLight = 0.78 + 0.3 * abs(dot(n, normalize(vec3(-0.6, 0.7, 0.55))));
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(at + q, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vColor;
+        varying float vLight;
+        void main() {
+          gl_FragColor = vec4(vColor * vLight, 1.0);
+          #include <colorspace_fragment>
+        }`,
+    }),
+  );
+  scene.add(new THREE.Mesh(g, mat));
+}
+
 export const createSunflowersScene: SceneMaker = async (canvas, { low }) => {
   const stage = createStage(canvas, { low, fog: { color: "#efe0a0", density: 0.0011 } });
   const { scene, keep } = stage;
@@ -536,12 +797,16 @@ export const createSunflowersScene: SceneMaker = async (canvas, { low }) => {
   await addJug(stage, ribbons);
   await addFlowers(stage, ribbons);
   addFallen(ribbons);
-  scene.add(
-    new THREE.Mesh(
-      keep(ribbons.geometry()),
-      await strokeMaterial(stage, 0.3, { twoSided: true, dark: 0.8 }),
-    ),
-  );
+  const strokes = await strokeMaterial(stage, 0.3, { twoSided: true, dark: 0.8 });
+  customize(strokes, "sunflower-strokes", (shader) => {
+    glowInShade(shader, 0.3);
+    nod(stage, shader);
+  });
+  scene.add(new THREE.Mesh(keep(ribbons.geometry()), strokes));
+
+  addSunPool(stage);
+  addFalling(stage);
+  addMotes(stage);
 
   return stage.finish({
     ground,

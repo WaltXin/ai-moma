@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import {
   getExhibitions,
   getExhibitionsOnFloor,
+  getFloor,
+  getFloorForWorld,
   getFloors,
+  getWorlds,
+  getWorldsOnFloor,
   validateMuseum,
 } from "@/lib/museum/registry";
 import type { Exhibition, Floor, Movement } from "@/lib/museum/types";
@@ -116,6 +120,44 @@ describe("validateMuseum", () => {
       expect.arrayContaining([
         expect.stringContaining('World "test-world" references unknown movement "nope"'),
         expect.stringContaining('World "test-world" references unknown room "ghost-room"'),
+      ]),
+    );
+  });
+
+  it("has a floor of painting worlds: Vibe, with the Starry Night and the Sunflowers on it", () => {
+    const vibe = getFloor("vibe");
+    expect(vibe).toBeDefined();
+    const worlds = getWorldsOnFloor(vibe!).map((w) => w.slug);
+    expect(worlds).toEqual(expect.arrayContaining(["starry-night", "sunflowers"]));
+    // Every world is entered from exactly one floor, and comes back to it.
+    for (const world of getWorlds()) expect(getFloorForWorld(world.slug)?.slug).toBe("vibe");
+  });
+
+  it("flags a floor that leads into a missing world, or a world on two floors", () => {
+    const world = {
+      slug: "test-world",
+      title: "Test",
+      artist: "Test",
+      year: 1900,
+      heldBy: { institution: "Test", url: "https://example.org" },
+      movement: movement.slug,
+      room: exhibition.slug,
+      intro: "",
+    };
+    const upstairs: Floor = {
+      level: floor.level + 1,
+      slug: "upstairs",
+      name: "Upstairs",
+      tagline: "",
+      exhibitions: [],
+      worlds: ["test-world", "no-such-world"],
+    };
+    const again: Floor = { ...upstairs, level: floor.level + 2, slug: "again", worlds: ["test-world"] };
+    const problems = validateMuseum([movement], [exhibition], [floor, upstairs, again], [world]);
+    expect(problems).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Floor "upstairs" references unknown world "no-such-world"'),
+        expect.stringContaining('World "test-world" is on two floors: upstairs, again'),
       ]),
     );
   });

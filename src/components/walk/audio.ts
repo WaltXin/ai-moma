@@ -106,7 +106,7 @@ export class MuseumAudio {
   private readonly brown: AudioBuffer;
   /** The air of a painting world, while the visitor is in one: wind, crickets, a far bell. */
   private airNow: { out: GainNode; stop(): void; silence(): void } | null = null;
-  private place: "outside" | "hall" | "room" | "open" = "room";
+  private place: "outside" | "hall" | "room" | "open" | "interior" = "room";
   private score: Score | null = null;
   private mood: Mood | null = null;
   private suspendTimer = 0;
@@ -272,9 +272,10 @@ export class MuseumAudio {
   /**
    * Where the visitor is: out in the street (traffic, no echo, the music far
    * off), in a big hall (long echo, a murmur of voices), in a room, or out in
-   * the open in a painting (no building round them at all).
+   * the open in a painting (no building round them at all), or in a painting's
+   * own room (an interior: a room's echo, but nobody else's voices in it).
    */
-  setPlace(place: "outside" | "hall" | "room" | "open") {
+  setPlace(place: "outside" | "hall" | "room" | "open" | "interior") {
     if (place === this.place) return;
     this.place = place;
     const t = this.ctx.currentTime;
@@ -283,14 +284,15 @@ export class MuseumAudio {
       t,
       0.6,
     );
+    const painted = place === "open" || place === "interior";
     this.murmur.gain.setTargetAtTime(place === "hall" ? 0.05 : place === "room" ? 0.012 : 0, t, 1);
     this.street.gain.setTargetAtTime(
-      place === "outside" ? 0.22 : place === "open" ? 0 : 0.015,
+      place === "outside" ? 0.22 : painted ? 0 : 0.015,
       t,
       0.8,
     );
     this.musicLevel.gain.setTargetAtTime(place === "outside" ? 0.1 : 0.34, t, 1.2);
-    this.hum.gain.setTargetAtTime(place === "outside" || place === "open" ? 0 : 0.045, t, 0.8);
+    this.hum.gain.setTargetAtTime(place === "outside" || painted ? 0 : 0.045, t, 0.8);
   }
 
   /**
@@ -328,6 +330,7 @@ export class MuseumAudio {
     if (air.wind > 0) {
       // Gusts: two slow swells that drift in and out of step, so no two are alike.
       const gusts = gain(ctx, 0.55, out);
+      // Indoors it's a draught at the window: the low of it, without the hiss.
       swing(gusts.gain, 0.071, 0.27);
       swing(gusts.gain, 0.19, 0.16);
       // The body of the wind, low and wide.
@@ -350,7 +353,7 @@ export class MuseumAudio {
       hissTone.frequency.value = 3200;
       hissTone.Q.value = 0.6;
       swing(hissTone.frequency, 0.13, 900);
-      hiss.connect(hissTone).connect(gain(ctx, 0.012 * air.wind, gusts));
+      hiss.connect(hissTone).connect(gain(ctx, (air.indoors ? 0.004 : 0.012) * air.wind, gusts));
     }
 
     if (air.crickets > 0) {
@@ -378,6 +381,39 @@ export class MuseumAudio {
       }
     }
 
+    if (air.cicadas) {
+      // Cicadas in the trees outside: a dry rasp, each a little apart in pitch, swelling
+      // and sinking together with the heat. Heard through a window, they lose their edge.
+      const chorus = gain(ctx, 0.6, out);
+      swing(chorus.gain, 0.043, 0.25);
+      swing(chorus.gain, 0.117, 0.13);
+      const through = ctx.createBiquadFilter();
+      through.type = "lowpass";
+      through.frequency.value = air.indoors ? 5200 : 9000;
+      through.connect(chorus);
+      for (const [pitch, rasp, pan] of [
+        [4700, 43, -0.5],
+        [5400, 51, 0.45],
+        [6100, 37, 0.05],
+      ]) {
+        const dry = start(ctx.createBufferSource());
+        dry.buffer = this.noise;
+        dry.loop = true;
+        dry.playbackRate.value = 0.9 + pan * 0.2;
+        const tone = ctx.createBiquadFilter();
+        tone.type = "bandpass";
+        tone.frequency.value = pitch;
+        tone.Q.value = 9;
+        // The rasp: the note opened and shut some forty times a second.
+        const rasped = gain(ctx, 0.55);
+        swing(rasped.gain, rasp, 0.45);
+        const p = ctx.createStereoPanner();
+        p.pan.value = pan;
+        dry.connect(tone).connect(rasped).connect(p);
+        p.connect(gain(ctx, 0.09 * air.cicadas, through));
+      }
+    }
+
     let bellTimer = 0;
     if (air.bell > 0) {
       const toll = () => {
@@ -399,6 +435,157 @@ export class MuseumAudio {
       },
       silence: () => window.clearTimeout(bellTimer),
     };
+  }
+
+  /**
+   * A sitting, kept in time by sound so it can be done with the eyes shut: a
+   * bowl struck to begin, a low tone that swells for `breathIn` seconds and
+   * sinks for `breathOut`, over and over, and three strokes of the bowl when
+   * `seconds` are up. The music steps back meanwhile, and a guide's voice
+   * comes in where it's asked to. All of it is laid out
+   * on the audio clock at the start, so it keeps time in a tab left in the
+   * background. Returns a way to end it early.
+   */
+  meditate(o: {
+    seconds: number;
+    breathIn: number;
+    breathOut: number;
+    /** A guide's voice: recordings, each begun `at` seconds into the sitting. */
+    voice?: { src: string; at: number }[];
+  }): () => void {
+    if (this.muted) return () => {};
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const end = t0 + o.seconds;
+    const out = gain(ctx, 1, this.master);
+    const echo = gain(ctx, 1, this.wet);
+    const sources: AudioScheduledSourceNode[] = [];
+    let stopped = false;
+
+    // The voice: each recording fetched and set on the audio clock as it arrives. One that
+    // arrives after its moment has passed is left unsaid rather than said late over the next.
+    const spoken = gain(ctx, 0.95, out);
+    spoken.connect(gain(ctx, 0.1, echo));
+    for (const cue of o.voice ?? []) {
+      void fetch(cue.src)
+        .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(cue.src))))
+        .then((bytes) => ctx.decodeAudioData(bytes))
+        .then((buffer) => {
+          if (stopped || ctx.currentTime > t0 + cue.at - 0.05) return;
+          const say = ctx.createBufferSource();
+          say.buffer = buffer;
+          say.connect(spoken);
+          say.start(t0 + cue.at);
+          sources.push(say);
+        })
+        .catch(() => {});
+    }
+
+    // The breath: the music's own keynote and its fifth, an octave down, behind a soft filter.
+    const root = hz((this.mood?.root ?? 60) - 12);
+    const soft = ctx.createBiquadFilter();
+    soft.type = "lowpass";
+    soft.frequency.value = 520;
+    const breath = gain(ctx, 0, out);
+    soft.connect(breath);
+    breath.connect(gain(ctx, 0.5, echo));
+    for (const [ratio, level] of [
+      [1, 1],
+      [1.5, 0.5],
+      [2, 0.22],
+    ]) {
+      const o2 = ctx.createOscillator();
+      o2.type = "triangle";
+      o2.frequency.value = root * ratio;
+      o2.connect(gain(ctx, level, soft));
+      o2.start(t0);
+      o2.stop(end + 3);
+      sources.push(o2);
+    }
+    const LOW = 0.006;
+    const HIGH = 0.05;
+    breath.gain.setValueAtTime(0, t0);
+    const cycle = o.breathIn + o.breathOut;
+    for (let t = t0; t + cycle <= end + 0.01; t += cycle) {
+      // setTargetAtTime rises and falls the way a breath does: quick at first, then easing.
+      breath.gain.setTargetAtTime(HIGH, t, o.breathIn / 3.2);
+      breath.gain.setTargetAtTime(LOW, t + o.breathIn, o.breathOut / 3.6);
+    }
+    breath.gain.setTargetAtTime(0, end, 0.8);
+
+    // The bowl, to begin and to end.
+    this.bowl(out, echo, t0 + 0.15, 1, sources);
+    for (const [after, level] of [
+      [0, 1],
+      [3.4, 0.85],
+      [6.8, 0.7],
+    ])
+      this.bowl(out, echo, end + after, level, sources);
+
+    // The music steps back, and comes forward again after the last stroke.
+    const music = this.musicLevel.gain;
+    const tone = this.musicTone.frequency;
+    music.setTargetAtTime(0.16, t0, 1.2);
+    tone.setTargetAtTime(1500, t0, 1.2);
+    music.setTargetAtTime(0.34, end + 8, 2.5);
+    tone.setTargetAtTime(16000, end + 8, 2.5);
+
+    return () => {
+      if (stopped) return;
+      stopped = true;
+      const t = ctx.currentTime;
+      if (t > end + 30) return;
+      out.gain.setTargetAtTime(0, t, 0.3);
+      echo.gain.setTargetAtTime(0, t, 0.3);
+      window.setTimeout(() => {
+        for (const s of sources) {
+          try {
+            s.stop();
+          } catch {
+            // Not started yet, or already over.
+          }
+        }
+        out.disconnect();
+        echo.disconnect();
+      }, 2500);
+      for (const p of [music, tone]) p.cancelScheduledValues(t);
+      music.setTargetAtTime(0.34, t, 0.8);
+      tone.setTargetAtTime(16000, t, 0.8);
+    };
+  }
+
+  /** One stroke of a singing bowl: a few partials far apart, each beating slowly against its twin. */
+  private bowl(
+    dry: AudioNode,
+    wet: AudioNode,
+    t: number,
+    level: number,
+    sources: AudioScheduledSourceNode[],
+  ) {
+    const ctx = this.ctx;
+    const body = gain(ctx, 0.085 * level);
+    body.connect(dry);
+    body.connect(gain(ctx, 0.7, wet));
+    for (const [ratio, peak, decay] of [
+      [1, 1, 9],
+      [2.71, 0.5, 6],
+      [5.15, 0.2, 3.2],
+      [8.2, 0.07, 1.6],
+    ]) {
+      for (const beat of [-0.35, 0.35]) {
+        const o = ctx.createOscillator();
+        o.frequency.value = 196 * ratio + beat;
+        // A bowl is struck with a padded stick: it speaks softly, then sings on.
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(peak * 0.5, t + 0.03);
+        g.gain.setTargetAtTime(0, t + 0.03, decay / 4);
+        o.connect(g).connect(body);
+        o.start(t);
+        o.stop(t + decay + 1);
+        sources.push(o);
+      }
+    }
   }
 
   /** One stroke of a church bell a long way off: its partials, dulled by the distance, in a long echo. */
@@ -454,6 +641,7 @@ export class MuseumAudio {
     this.focus(this.focused);
   }
 
+  /** A footfall on a floor of the building, or on the ground of a painting world. */
   footstep(surface: Surface | "grass", strength = 1) {
     if (this.muted) return;
     const ctx = this.ctx;

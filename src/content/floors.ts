@@ -57,4 +57,12 @@ export const floors: Floor[] = [
     tagline: "Op Art, Kinetic Art and works that change as you move.",
     exhibitions: ["angles-of-view"],
   },
+  {
+    level: 8,
+    slug: "vibe",
+    name: "Vibe",
+    tagline: "Paintings to walk into and be still in. Step inside one, sit down, and breathe.",
+    exhibitions: [],
+    worlds: ["starry-night", "sunflowers", "wheat-field-with-cypresses"],
+  },
 ];

@@ -4,7 +4,10 @@ import { guides as allGuides } from "@/content/guides";
 import { guidesAudio } from "@/content/guides-audio.generated";
 import { movements as allMovements } from "@/content/movements";
 import { type StationInfo, stations as allStations } from "@/content/stations";
+import { meditationCues } from "@/content/meditation";
+import { meditationAudio } from "@/content/meditation-audio.generated";
 import { worlds as allWorlds } from "@/content/worlds";
+import type { Cue } from "@/lib/worlds/meditation";
 import { RECIPES } from "@/lib/studio-art";
 import { GUIDE_LANGS, type GuideLang, guideHash } from "./guides";
 import type { Artwork, Exhibition, Floor, Movement, PaintingWorld } from "./types";
@@ -81,9 +84,21 @@ export function getWorld(slug: string): PaintingWorld | undefined {
   return allWorlds.find((w) => w.slug === slug);
 }
 
-/** The worlds you can step into from a room. */
+/** The worlds whose painter hangs in a room. */
 export function getWorldsForRoom(slug: string): PaintingWorld[] {
   return allWorlds.filter((w) => w.room === slug);
+}
+
+/** The worlds entered from a floor, in walking order. */
+export function getWorldsOnFloor(floor: Floor): PaintingWorld[] {
+  return (floor.worlds ?? [])
+    .map((slug) => getWorld(slug))
+    .filter((w): w is PaintingWorld => w !== undefined);
+}
+
+/** The floor a world is entered from, if it's on one. */
+export function getFloorForWorld(slug: string): Floor | undefined {
+  return allFloors.find((f) => f.worlds?.includes(slug));
 }
 
 export function getFloorForExhibition(slug: string): Floor | undefined {
@@ -180,6 +195,16 @@ export function validateMuseum(
     "world slug",
     worlds.map((w) => w.slug),
   );
+  const worldSlugs = new Set(worlds.map((w) => w.slug));
+  const entered = new Map<string, string>();
+  for (const f of floors) {
+    for (const slug of f.worlds ?? []) {
+      if (!worldSlugs.has(slug)) problems.push(`Floor "${f.slug}" references unknown world "${slug}"`);
+      const other = entered.get(slug);
+      if (other) problems.push(`World "${slug}" is on two floors: ${other}, ${f.slug}`);
+      entered.set(slug, f.slug);
+    }
+  }
   for (const w of worlds) {
     if (!movementSlugs.has(w.movement))
       problems.push(`World "${w.slug}" references unknown movement "${w.movement}"`);
@@ -218,6 +243,24 @@ export function getGuide(id: string): Partial<Record<GuideLang, GuideEntry>> | u
     out[lang] = audio && audio.hash === guideHash(text) ? { text, audio: { src: audio.src, seconds: audio.seconds } } : { text };
   }
   return out;
+}
+
+/**
+ * The guided meditation's cues: each one's words, and its voice if the voice
+ * was made from those words (an older recording is left out, as for the guides).
+ */
+export function getMeditationCues(): Record<string, Cue> {
+  return Object.fromEntries(
+    Object.entries(meditationCues).map(([id, text]) => {
+      const audio = meditationAudio[id];
+      return [
+        id,
+        audio && audio.hash === guideHash(text)
+          ? { text, audio: { src: audio.src, seconds: audio.seconds } }
+          : { text },
+      ];
+    }),
+  );
 }
 
 /** A movement's hands-on station (`/studio/<movement>`), if it has one. */

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SCENES } from "@/components/worlds/scenes";
-import { getWorlds } from "@/lib/museum/registry";
+import { getFloors, getWorlds, getWorldsOnFloor } from "@/lib/museum/registry";
 import { arrivalOf } from "@/lib/worlds/place";
 import { PLACES } from "@/lib/worlds/places";
 import * as SUN from "@/lib/worlds/sunflowers";
@@ -35,6 +35,18 @@ describe("painting worlds", () => {
       .sort();
     expect(Object.keys(PLACES).sort()).toEqual(slugs);
     expect(Object.keys(SCENES).sort()).toEqual(slugs);
+  });
+
+  it("has an air of its own in every world a floor leads into, so there's something to sit and listen to", () => {
+    for (const floor of getFloors()) {
+      for (const world of getWorldsOnFloor(floor)) {
+        const place = PLACES[world.slug];
+        expect(place, world.slug).toBeDefined();
+      }
+    }
+    // The two made for sitting in: night air on the hill, an open window by the table.
+    expect(PLACES["starry-night"].air).toBeDefined();
+    expect(PLACES.sunflowers.air).toBeDefined();
   });
 
   it("starts every visitor somewhere they may stand", () => {
@@ -261,5 +273,51 @@ describe("the Sunflowers table", () => {
       expect(Math.abs(S.heightAt(p.x, p.z))).toBeLessThan(1e-9);
       expect(Math.hypot(p.x - S.JUG.x, p.z - S.JUG.z)).toBeGreaterThan(S.JUG_RADIUS);
     }
+  });
+
+  it("lets petals fall from flowers past their best, onto the table, clear of the jug", () => {
+    expect(S.FALLING.length).toBeGreaterThan(4);
+    for (const p of S.FALLING) {
+      // From up among the heads, far over a small visitor's own…
+      expect(p.from.y).toBeGreaterThan(15);
+      // …to the table, where a visitor could walk up to it.
+      expect(Math.abs(S.heightAt(p.to.x, p.to.z))).toBeLessThan(1e-9);
+      expect(S.insideBounds(p.to.x, p.to.z)).toBe(true);
+      expect(Math.hypot(p.to.x - S.JUG.x, p.to.z - S.JUG.z)).toBeGreaterThan(S.JUG_RADIUS + 3);
+      // Never two falls from one place at once: the wait is longer than a fall and a rest.
+      expect(p.every).toBeGreaterThan(40);
+    }
+  });
+
+  it("lays the window's light on the table in four panes, where the visitor can walk into it", () => {
+    const { x, z, w, d } = S.SUN_POOL;
+    // The bars of the window cross at its middle; the panes are lit either side of them.
+    expect(S.sunAt(x, z)).toBe(0);
+    const c = Math.cos(S.SUN_POOL.turn);
+    const s = Math.sin(S.SUN_POOL.turn);
+    for (const [u, v] of [
+      [0.5, 0.5],
+      [-0.5, 0.5],
+      [0.5, -0.5],
+      [-0.5, -0.5],
+    ]) {
+      const px = x + (u * w * c) / 2 - (v * d * s) / 2;
+      const pz = z + (u * w * s) / 2 + (v * d * c) / 2;
+      expect(S.sunAt(px, pz), `pane ${u},${v}`).toBeGreaterThan(0.95);
+      expect(S.insideBounds(px, pz)).toBe(true);
+      expect(S.blocked(px, pz)).toBe(false);
+    }
+    // And none of it far from the window's pool.
+    expect(S.sunAt(x + w, z + d)).toBe(0);
+    // The light comes down, from the left.
+    expect(S.SUN_RAY.y).toBeLessThan(0);
+    expect(S.SUN_RAY.x).toBeGreaterThan(0);
+  });
+
+  it("sounds like a room with its window open: boards underfoot, cicadas and a draught outside", () => {
+    const place = PLACES.sunflowers;
+    expect(place.footing).toBe("wood");
+    expect(place.air?.indoors).toBe(true);
+    expect(place.air?.cicadas).toBeGreaterThan(0);
   });
 });

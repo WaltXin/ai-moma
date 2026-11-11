@@ -249,6 +249,14 @@ sit and stare in museums, so give a few paintings a place to do that inside them
 can credit its makers (`creators` in `src/content/worlds.ts`, optional) on the way in and under
 it; only The Starry Night does.
 
+The worlds have a floor of their own, **Vibe** (Floor 8, `worlds` on a `Floor` in
+`src/content/floors.ts`): a floor with no walls to hang, only paintings to walk into and be
+still in. Its guide (`/floors/vibe`) is a door into each world (`WorldDoor`), the lobby lists it
+with its worlds, and a world's "Back to the museum" returns to it (`getFloorForWorld`). In the
+3D walk each world gets a quiet room of the floor, named after the painting, with sofas and a
+kiosk that leads in (`worlds` in `buildBuilding`, a `Portal` of kind `world`). A room whose
+painter has worlds upstairs points up to the floor instead of opening them itself.
+
 ```
 src/content/worlds.ts                 PaintingWorld: title, artist, year, where the real one hangs, its room here
 src/lib/worlds/<slug>.ts              the layout as data, and its WorldPlace: start, ground, bounds, music, air
@@ -258,7 +266,8 @@ src/components/worlds/brush.ts        painters: a sky panorama, any surface, bru
 src/components/worlds/kit.ts          the world kit: stage, painted sky, ground, grass, ridges, flame trees, bushes
 src/components/worlds/<slug>-scene.ts a world's scene: the kit's pieces, plus what only it has
 src/components/worlds/scenes.ts       every world's scene, by slug, loaded on demand
-src/components/worlds/world-view.tsx  walking, sitting, sound and controls, the same for every world
+src/components/worlds/world-view.tsx  walking, sitting, meditating, sound and controls, the same for every world
+src/components/worlds/world-door.tsx  the way into a world, on its floor's guide
 ```
 
 ### How a world is painted
@@ -320,13 +329,21 @@ life (`FLOWERS`: in bloom, open, wilting, gone to seed). Everything raised is on
 stroke ribbons (`strokeRibbons`, `strokeMaterial`): the jug's glaze in vertical strokes with
 its blue line and signature, each seed head a spiral of thick dabs, each petal three strokes
 side by side (its colour, a lighter edge, a darker ochre one), leaves, and petals fallen on
-the table. Colours given as 0–255 sRGB go through `setRGB(…, SRGBColorSpace)`: handed to
+the table. The room has a window, open on an August afternoon: its light lies on the table in
+four panes (`SUN_POOL`, `sunAt`: painted on in paler strokes, with a soft glow over them that
+comes and goes), dust turns in the air and shows gold where it crosses the beam, everything
+above the jug's lip nods in the draught (one vertex motion shared by strokes, seed heads and
+stems, so each flower moves as one), and now and then a flower past its best lets a petal go
+(`FALLING`: it turns over on the way down, lies on the table a while, and is gone before the
+next). Underfoot the table knocks like boards; through the window come cicadas, the draught
+and a bell across the town. Colours given as 0–255 sRGB go through `setRGB(…, SRGBColorSpace)`: handed to
 `new THREE.Color(r, g, b)` they're taken as linear and come out washed pale.
 
 ### Adding a world
 
 1. Add the painting to `src/content/worlds.ts` (public domain only; `validateMuseum()` checks
-   its movement and room, and a room links to its worlds with `getWorldsForRoom`).
+   its movement and room), and to a floor's `worlds` in `src/content/floors.ts` (Vibe): the
+   building has a room for each, three to a floor above the terrace.
 2. Write its layout as data in `src/lib/worlds/<slug>.ts`, with a `WorldPlace`, and add it to
    `PLACES`. Test it in `tests/worlds.test.ts`.
 3. Write `src/components/worlds/<slug>-scene.ts` from the kit, and add it to `SCENES`.
@@ -347,8 +364,8 @@ the table. Colours given as 0–255 sRGB go through `setRGB(…, SRGBColorSpace)
 
 **No photograph of the painting is used**, not even a public-domain one. The world is an
 interpretation drawn with code, and the welcome says where the real painting hangs. Only
-public-domain paintings get a world. A room links to its worlds (`getWorldsForRoom`), and
-`validateMuseum()` checks that each world's movement and room exist.
+public-domain paintings get a world. `validateMuseum()` checks that each world's movement and
+room exist, and that a floor's worlds exist and are on one floor only.
 
 **Walking like a person** (`world-view.tsx`, the same in every world). A visitor comes in a
 few steps behind where they'll stand (`arrivalOf`) and walks the rest, so they arrive on foot;
@@ -359,11 +376,42 @@ behind, and they breathe when still. Each footfall is heard where the place says
 underfoot (`footing`). With `prefers-reduced-motion` the view holds steady and they start
 where they'll stand.
 
-**The air.** A place can say what its air sounds like (`air`: wind, crickets, a bell): wind
-in gusts, crickets trilling and resting on either side, and now and then a few strokes of a
-bell from far off (`MuseumAudio.air`, made live like the rest of the sound). A world with air
-is out in the open (`setPlace("open")`): no building's hum, no murmur of other visitors. A
-`vignette` colour darkens the corners of the view.
+**The air.** A place can say what its air sounds like (`air`: wind, crickets, cicadas, a
+bell): wind in gusts, crickets trilling and resting on either side, cicadas rasping in the
+heat, and now and then a few strokes of a bell from far off (`MuseumAudio.air`, made live like
+the rest of the sound). A world with air is out in the open (`setPlace("open")`), or, with
+`indoors`, in the painting's own room with all of that outside its window
+(`setPlace("interior")`); either way there's no building's hum and no murmur of other
+visitors. A `vignette` colour darkens the corners of the view.
+
+**Meditating** (`world-view.tsx`, the same in every world). "Meditate" (or M) opens a small
+panel: a bar to drag for how long (1 to 30 minutes), and a choice of with guidance or
+without; the last choice is kept in the browser. Then it sits the visitor down where they are. The breath is kept at six a
+minute, four seconds in and six out, three ways at once from the same numbers: a ring low in
+the view that swells and sinks (CSS, `breath-ring` in `globals.css`; with
+`prefers-reduced-motion` it only brightens and dims), the view itself rising and sinking a
+centimetre, and a soft tone in the music's key (`MuseumAudio.meditate`), so it can be done
+with the eyes shut. A bowl is struck to begin and three times to end, and the music steps
+back meanwhile. All the sound is laid out on the audio clock at the start, so it keeps time
+in a tab left in the background. The words "Breathe in / Breathe out" show for the first
+minute only; the controls fade as they do for anyone sitting, and brought back they show the
+time left and a way to end. Standing up or walking ends it; the screen is kept awake while
+it lasts (Screen Wake Lock, where the browser has it). Nothing in the world changes for it:
+the place is the same for someone meditating as for someone walking by.
+
+**Guidance.** With guidance, a voice speaks short cues over the sitting: it settles the
+visitor, gives them the breath and something in this world to look at, speaks a few more times
+through the middle with long silences between (more cues the longer the sitting; in a long one
+it says it will be quiet, and is), says when the end is near, and has the last word after the
+bowl. The words are in `src/content/meditation.ts` (a `look-<world>` cue for each world);
+`guidanceFor` (`src/lib/worlds/meditation.ts`) places them for any length so nothing is said
+over anything else or over the bowl (`tests/meditation.test.ts` checks every length in every
+world). `pnpm meditation:voice` voices each cue once with Cartesia, slowly, in the audio
+guides' English narrator (`public/meditation/<id>.mp3`, and
+`src/content/meditation-audio.generated.ts` with each file's length and the fingerprint of its
+text); the site never calls a voice service. After changing a cue, run it again: the test
+fails until the voice matches the words. Each cue also shows as words while it's said, so
+guidance works with the sound off.
 
 **Quiet controls.** Sitting, or in full screen, the title and buttons fade after a few seconds
 (2.5 s in full screen, 4 s sitting), and the cursor hides. Moving the mouse, tapping or pressing

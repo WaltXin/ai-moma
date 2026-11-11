@@ -141,6 +141,11 @@ export type Floor = {
   tagline: string;
   /** Exhibition slugs on this floor, in walking order. */
   exhibitions: Slug[];
+  /**
+   * Painting worlds entered from this floor, in walking order. A floor of
+   * worlds is one to stay on rather than walk past: step into a painting, sit, and be still.
+   */
+  worlds?: Slug[];
 };
 
 /**
@@ -157,7 +162,7 @@ export type PaintingWorld = {
   /** Where the painting itself hangs; shown on the way in. */
   heldBy: { institution: string; url: string };
   movement: Slug;
-  /** The room in this museum to come back to. */
+  /** The room in this museum where its painter hangs. */
   room: Slug;
   /** One or two sentences on the way in. */
   intro: string;

@@ -29,7 +29,7 @@ import {
 
 /**
  * The whole museum in 3D, built from the same `Building` as everything
- * else: seven floors round a skylit atrium, the lobby and the street, the
+ * else: every floor round a skylit atrium, the lobby and the street, the
  * paintings, the furniture and the other visitors. Plain three.js, no
  * React, so the page can load it on demand.
  */

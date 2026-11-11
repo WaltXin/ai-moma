@@ -6,7 +6,13 @@ import { WallFallback } from "@/components/gallery/wall-fallback";
 import { TEXT_LINK } from "@/components/gallery/wall-parts";
 import { Creators } from "@/components/worlds/creators";
 import { WorldView } from "@/components/worlds/world-view";
-import { getExhibition, getWorld, getWorlds } from "@/lib/museum/registry";
+import {
+  getExhibition,
+  getFloorForWorld,
+  getMeditationCues,
+  getWorld,
+  getWorlds,
+} from "@/lib/museum/registry";
 import { worldRequestUrl } from "@/lib/worlds/request";
 
 export function generateStaticParams() {
@@ -34,6 +40,9 @@ async function World({ params }: { params: PageProps<"/worlds/[world]">["params"
   const world = getWorld((await params).world);
   if (!world) notFound();
   const room = getExhibition(world.room);
+  const floor = getFloorForWorld(world.slug);
+  // The way out: the floor the world is entered from, or the room its painter hangs in.
+  const back = floor ? `/floors/${floor.slug}` : `/exhibitions/${world.room}`;
 
   return (
     // Pull the world out to the full width of the window.
@@ -42,7 +51,7 @@ async function World({ params }: { params: PageProps<"/worlds/[world]">["params"
         <h1 id="world-title" className="sr-only">
           Step into {world.title}, after {world.artist}
         </h1>
-        <WorldView world={world} />
+        <WorldView world={world} back={back} guidance={getMeditationCues()} />
         <div className="mx-auto max-w-6xl px-4 py-6 text-[#c9d4ea] sm:px-6">
           <p>
             An interpretation in 3D of {world.artist}&apos;s {world.title} ({world.year}), drawn
@@ -64,6 +73,15 @@ async function World({ params }: { params: PageProps<"/worlds/[world]">["params"
               </>
             )}
           </p>
+          {floor && (
+            <p className="mt-3">
+              One of the worlds on{" "}
+              <Link href={`/floors/${floor.slug}`} className={`${TEXT_LINK} text-white`}>
+                Floor {floor.level}: {floor.name}
+              </Link>
+              . Choose Meditate inside it to sit and breathe, guided by a voice or in quiet, for as long as you set.
+            </p>
+          )}
           <p className="mt-3">
             Another painting you&apos;d like to step into?{" "}
             <a

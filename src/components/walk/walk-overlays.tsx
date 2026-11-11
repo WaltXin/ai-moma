@@ -440,7 +440,9 @@ export function PortalPanel({ portal, onClose }: { portal: Portal; onClose: () =
         ? "Step into the lab"
         : portal.kind === "station"
           ? "Try it"
-          : "Read the guides";
+          : portal.kind === "world"
+            ? "Walk into it"
+            : "Read the guides";
   return (
     <Dialog labelledBy={titleId} onClose={onClose}>
       <h2 id={titleId} className="wall-title pr-10 text-[clamp(2rem,5vw,2.75rem)]">

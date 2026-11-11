@@ -58,6 +58,14 @@ Rough order. Each item is a good first PR area.
 - [x] Walk into a world like a person: come in on foot, with a gait, footfalls and momentum;
       on the Starry Night hill, grass in the wind, olives to walk round, fireflies, wind,
       crickets and a far bell
+- [x] Vibe, a floor of its own for the painting worlds (Floor 8): paintings to walk into and be
+      still in, each with a quiet room and a kiosk in the 3D walk
+- [x] Meditate in a world: drag a bar to set how long (1 to 30 minutes), with a breath kept by
+      a ring, a soft tone and the view itself, a bowl to begin and end
+- [x] Guided meditation: a voice that settles you, speaks a few times and leaves you to it,
+      with something to look at in each world; or sit without it
+- [x] Sunflowers comes alive: the window's light on the table, dust in it, flowers nodding in
+      the draught, petals falling, boards underfoot and cicadas outside
 - [ ] A world from your own photo: a moment you loved, rebuilt in a movement's style (the Studio, but walkable)
 - [ ] Real visitors in a world, quietly: see who else is sitting on the hill right now (no made-up ones)
 - [ ] VR for the most-loved worlds (WebXR)
